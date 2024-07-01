@@ -8,59 +8,40 @@ import copy
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model, num_heads):
         super(MultiHeadAttention, self).__init__()
-        # Ensure that the model dimension (d_model) is divisible by the number of heads
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
 
-        # Initialize dimensions
-        self.d_model = d_model # Model's dimension
-        self.num_heads = num_heads # Number of attention heads
-        self.d_k = d_model // num_heads # Dimension of each head's key, query, and value
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads
 
-        # Linear layers for transforming inputs
-        self.W_q = nn.Linear(d_model, d_model) # Query transformation
-        self.W_k = nn.Linear(d_model, d_model) # Key transformation
-        self.W_v = nn.Linear(d_model, d_model) # Value transformation
-        self.W_o = nn.Linear(d_model, d_model) # Output transformation
+        self.W_q = nn.Linear(d_model, d_model)
+        self.W_k = nn.Linear(d_model, d_model)
+        self.W_v = nn.Linear(d_model, d_model)
+        self.W_o = nn.Linear(d_model, d_model)
 
     def scaled_dot_product_attention(self, Q, K, V, mask=None):
-        # Calculate attention scores
         attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
-
-        # Apply mask if provided (useful for preventing attention to certain parts like padding)
         if mask is not None:
             attn_scores = attn_scores.masked_fill(mask == 0, -1e9)
-
-        # Softmax is applied to obtain attention probabilities
         attn_probs = torch.softmax(attn_scores, dim=-1)
-
-        # Multiply by values to obtain the final output
         output = torch.matmul(attn_probs, V)
         return output
 
     def split_heads(self, x):
-        # Reshape the input to have num_heads for multi-head attention
         batch_size, seq_length, d_model = x.size()
         return x.view(batch_size, seq_length, self.num_heads, self.d_k).transpose(1, 2)
 
     def combine_heads(self, x):
-        # Combine the multiple heads back to original shape
         batch_size, _, seq_length, d_k = x.size()
         return x.transpose(1, 2).contiguous().view(batch_size, seq_length, self.d_model)
 
     def forward(self, Q, K, V, mask=None):
-        # Apply linear transformations and split heads
         Q = self.split_heads(self.W_q(Q))
         K = self.split_heads(self.W_k(K))
         V = self.split_heads(self.W_v(V))
-
-        # Perform scaled dot-product attention
         attn_output = self.scaled_dot_product_attention(Q, K, V, mask)
-
-        # Combine heads and apply output transformation
         output = self.W_o(self.combine_heads(attn_output))
         return output
-
-
 
 class PositionWiseFeedForward(nn.Module):
     def __init__(self, d_model, d_ff):
@@ -71,8 +52,6 @@ class PositionWiseFeedForward(nn.Module):
 
     def forward(self, x):
         return self.fc2(self.relu(self.fc1(x)))
-
-
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_seq_length):
@@ -90,8 +69,6 @@ class PositionalEncoding(nn.Module):
     def forward(self, x):
         return x + self.pe[:, :x.size(1)]
 
-
-
 class EncoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout):
         super(EncoderLayer, self).__init__()
@@ -107,7 +84,6 @@ class EncoderLayer(nn.Module):
         ff_output = self.feed_forward(x)
         x = self.norm2(x + self.dropout(ff_output))
         return x
-
 
 class DecoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout):
@@ -129,9 +105,6 @@ class DecoderLayer(nn.Module):
         x = self.norm3(x + self.dropout(ff_output))
         return x
 
-
-
-
 class MultiTaskTransformer(nn.Module):
     def __init__(self, src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks):
         super(MultiTaskTransformer, self).__init__()
@@ -145,14 +118,13 @@ class MultiTaskTransformer(nn.Module):
         self.fc = nn.Linear(d_model, tgt_vocab_size)
         self.dropout = nn.Dropout(dropout)
 
-        # Output heads for additional tasks
-        self.task_heads = nn.ModuleList([nn.Linear(d_model, 1) for _ in range(num_tasks)])  # Assuming regression tasks
+        self.task_heads = nn.ModuleList([nn.Linear(d_model * 4, 1) for _ in range(num_tasks)])  # Updated to d_model * 4 for concatenated vectors
 
     def generate_mask(self, src, tgt):
-        src_mask = (src != 0).unsqueeze(1).unsqueeze(2)
-        tgt_mask = (tgt != 0).unsqueeze(1).unsqueeze(3)
+        src_mask = (src != 0).unsqueeze(1).unsqueeze(2).to(src.device)
+        tgt_mask = (tgt != 0).unsqueeze(1).unsqueeze(3).to(tgt.device)
         seq_length = tgt.size(1)
-        nopeak_mask = (1 - torch.triu(torch.ones(1, seq_length, seq_length), diagonal=1)).bool()
+        nopeak_mask = (1 - torch.triu(torch.ones(1, seq_length, seq_length), diagonal=1)).bool().to(tgt.device)
         tgt_mask = tgt_mask & nopeak_mask
         return src_mask, tgt_mask
 
@@ -162,8 +134,10 @@ class MultiTaskTransformer(nn.Module):
         tgt_embedded = self.dropout(self.positional_encoding(self.decoder_embedding(tgt)))
 
         enc_output = src_embedded
-        for enc_layer in self.encoder_layers:
+        for i, enc_layer in enumerate(self.encoder_layers):
             enc_output = enc_layer(enc_output, src_mask)
+            if i == len(self.encoder_layers) - 2:
+                penultimate_output = enc_output
 
         dec_output = tgt_embedded
         for dec_layer in self.decoder_layers:
@@ -171,9 +145,17 @@ class MultiTaskTransformer(nn.Module):
 
         output = self.fc(dec_output)
 
-        # Get the representation of the tokens for the additional tasks
-        token_representations = enc_output
-        task_outputs = [head(token_representations) for head in self.task_heads]
+        # Aggregate token representations using concatenation strategy
+        mean_pool = enc_output.mean(dim=1)  # Mean pooling
+        max_pool = enc_output.max(dim=1)[0]  # Max pooling
+        first_token_last_layer = enc_output[:, 0, :]  # First token output of the last layer
+        first_token_penultimate_layer = penultimate_output[:, 0, :]  # First token output of the penultimate layer
+
+        # Concatenate the vectors
+        token_representations = torch.cat([mean_pool, max_pool, first_token_last_layer, first_token_penultimate_layer], dim=1)  # Shape: (batch_size, d_model * 4)
+
+        # Compute task outputs
+        task_outputs = torch.cat([head(token_representations) for head in self.task_heads], dim=1)  # Shape: (batch_size, num_tasks)
 
         return output, task_outputs
 
@@ -181,23 +163,35 @@ class MultiTaskTransformer(nn.Module):
         src = src.to(torch.long)
         src_embedded = self.dropout(self.positional_encoding(self.encoder_embedding(src)))
         enc_output = src_embedded
-        for enc_layer in self.encoder_layers:
-            enc_output = enc_layer(enc_output, (src != 0).unsqueeze(1).unsqueeze(2))
-        return enc_output
 
-    def decode_representation(self, enc_output, max_length, tokenizer):
+        first_token_penultimate_layer = None # First token output of the penultimate layer
+        for i, enc_layer in enumerate(self.encoder_layers):
+            enc_output = enc_layer(enc_output, (src != 0).unsqueeze(1).unsqueeze(2).to(src.device))
+            if i == len(self.encoder_layers) - 2:
+                penultimate_output = enc_output
+                first_token_penultimate_layer = penultimate_output[:, 0, :]
+        mean_pool = enc_output.mean(dim=1)  # Mean pooling
+        max_pool = enc_output.max(dim=1)[0]  # Max pooling
+        first_token_last_layer = enc_output[:, 0, :]  # First token output of the last layer
+        first_token_penultimate_layer = penultimate_output[:, 0, :]  # First token output of the penultimate layer
+
+        # Concatenate the vectors
+        fingerprint = torch.cat([mean_pool, max_pool, first_token_last_layer, first_token_penultimate_layer], dim=1)  # Shape: (batch_size, d_model * 4)
+
+        return enc_output, fingerprint
+
+    def decode_representation(self, enc_output, fingerprint, max_length, tokenizer):
         batch_size = enc_output.size(0)
         decoded_sequence = torch.full((batch_size, 1), tokenizer.token_to_id("[CLS]"), dtype=torch.long, device=enc_output.device)
         eos_token_id = tokenizer.token_to_id("[EOS]")
 
-        # Mask to track completed sequences
         finished = torch.zeros(batch_size, dtype=torch.bool, device=enc_output.device)
 
         for _ in range(max_length):
             tgt_embedded = self.positional_encoding(self.decoder_embedding(decoded_sequence))
-            tgt_mask = (decoded_sequence != 0).unsqueeze(1).unsqueeze(2)
+            tgt_mask = (decoded_sequence != 0).unsqueeze(1).unsqueeze(2).to(decoded_sequence.device)
             seq_length = decoded_sequence.size(1)
-            nopeak_mask = (1 - torch.triu(torch.ones(1, seq_length, seq_length), diagonal=1)).bool()
+            nopeak_mask = (1 - torch.triu(torch.ones(1, seq_length, seq_length), diagonal=1)).bool().to(decoded_sequence.device)
             tgt_mask = tgt_mask & nopeak_mask
 
             dec_output = tgt_embedded
@@ -207,26 +201,19 @@ class MultiTaskTransformer(nn.Module):
             output = self.fc(dec_output)
             _, next_token = torch.max(output[:, -1, :], dim=-1)
 
-            # Add debug statement to print the decoded token at each step
-            # print("Decoding step, tokens:", next_token.cpu().numpy())
-
-            # Add next token to decoded sequence
             decoded_sequence = torch.cat((decoded_sequence, next_token.unsqueeze(1)), dim=1)
-
-            # Update finished mask
             finished |= (next_token == eos_token_id)
 
-            # Stop if all sequences are finished
             if finished.all():
                 break
 
-        # Ensure sequences stop at [EOS]
         for i in range(decoded_sequence.size(0)):
             eos_index = (decoded_sequence[i] == eos_token_id).nonzero(as_tuple=True)[0]
             if eos_index.numel() > 0:
-                # print(f"Sequence {i} ends at position {eos_index[0]}")
                 decoded_sequence[i, eos_index[0]+1:] = tokenizer.token_to_id("[PAD]")
 
-        return decoded_sequence
 
+        # Compute task outputs
+        task_outputs = torch.cat([head(fingerprint) for head in self.task_heads], dim=1)  # Shape: (batch_size, num_tasks)
 
+        return decoded_sequence, task_outputs

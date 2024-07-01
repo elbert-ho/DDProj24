@@ -1,0 +1,12 @@
+name: DDProj24
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - tokenizers
+  - pytorch
+  - torchvision
+  - chembl_webresource_client
+  - pandas
+  - rdkit
+prefix: /Users/Elbert/miniconda3/envs/DDProj24

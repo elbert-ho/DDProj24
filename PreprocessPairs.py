@@ -4,6 +4,10 @@ import torch
 from tokenizers import Tokenizer
 import gc
 import numpy as np
+from rdkit import Chem
+from rdkit.Chem import QED
+sys.path.append(os.path.join(os.environ['CONDA_PREFIX'],'share','RDKit','Contrib'))
+from SA_Score import sascorer
 from MolTransformer import MultiTaskTransformer
 from ProteinTransformer import BERT
 
@@ -47,6 +51,8 @@ smiles_model.to('cuda')
 
 # Collect results in a list first
 results = []
+qed_values = []
+sas_values = []
 
 for index, row in tqdm.tqdm(df.iterrows(), total=len(df)):
     protein_sequence = row['Protein Sequence']
@@ -63,10 +69,23 @@ for index, row in tqdm.tqdm(df.iterrows(), total=len(df)):
 
     protein_output = protein_model.encode_protein(encoded_protein, torch.ones(encoded_protein.shape).to('cuda'))
     # protein_cls = protein_output[0][0].flatten().cpu().detach().numpy()
-    smiles_output = smiles_model.encode_smiles(encoded_smiles).flatten().cpu().detach().numpy()
+    smiles_output = smiles_model.encode_smiles(encoded_smiles)
+    smiles_full = smiles_output[0].flatten().cpu().detach().numpy()
+    smiles_fingerprint = smiles_output[1].flatten().cpu().detach().numpy()
+
+    # Calculate QED and SAS
+    mol = Chem.MolFromSmiles(smiles_string)
+    if mol:
+        qed_value = QED.qed(mol)
+        sas_value = sascorer.calculateScore(mol)
+    else:
+        qed_value = None
+        sas_value = None
 
     # Collect result
-    results.append({'Protein CLS': protein_output, 'SMILES Output': smiles_output, 'pIC50': pIC50})
+    results.append({'Protein CLS': protein_output, 'SMILES Output': smiles_output, 'SMILES Fingerprint': smiles_fingerprint, 'pIC50': pIC50})
+    qed_values.append(qed_value)
+    sas_values.append(sas_value)
 
     # Clean up
     del encoded_protein, encoded_smiles, protein_output, smiles_output
@@ -75,8 +94,14 @@ for index, row in tqdm.tqdm(df.iterrows(), total=len(df)):
 # Save the results in a lossless format using np.save
 protein_cls_array = np.array([result['Protein CLS'] for result in results])
 smiles_output_array = np.array([result['SMILES Output'] for result in results])
+smiles_fingerprint_array = np.array([result['SMILES Fingerprint'] for result in results])
 pIC50_array = np.array([result['pIC50'] for result in results])
+qed_array = np.array(qed_values)
+sas_array = np.array(sas_values)
 
 np.save('data/protein_cls.npy', protein_cls_array)
 np.save('data/smiles_output.npy', smiles_output_array)
+np.save('data/smiles_fingerprint.npy', smiles_output_array)
 np.save('data/pIC50.npy', pIC50_array)
+np.save('data/qed.npy', qed_array)
+np.save('data/sas.npy', sas_array)
