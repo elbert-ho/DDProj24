@@ -19,7 +19,7 @@ dropout = 0.1
 batch_size = 32
 learning_rate = 1e-4
 patience = 3  # Early stopping patience
-num_tasks = 1  # Number of additional tasks
+num_tasks = 5  # Number of additional tasks
 
 # Initialize the dataset and dataloaders
 dataset = SMILESDataset("smiles_data1000_with_qed.csv", vocab_size=src_vocab_size, max_length=max_seq_length)

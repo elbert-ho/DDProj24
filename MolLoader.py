@@ -16,7 +16,7 @@ class SMILESDataset(Dataset):
                 reader = csv.DictReader(f)
                 for row in reader:
                     smiles_list.append(row['SMILES'])
-                    properties.append([float(row['QED'])])  # Add your properties here
+                    properties.append([float(row['logP']), float(row['tpsa']), float(row['h_donors']), float(row['h_acceptors']), float(row['solubility'])])  # Add your properties here
             return smiles_list, properties
 
         def train_bpe(sequences, vocab_size):

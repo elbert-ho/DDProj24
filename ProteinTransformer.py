@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import torch.optim as optim  # Corrected import
 from torch.utils.data import TensorDataset, DataLoader
 from transformers import BertTokenizer
 
@@ -39,19 +37,11 @@ class MultiHeadAttention(nn.Module):
         k_s = self.W_K(K).view(batch_size, -1, self.n_heads, self.d_k).transpose(1,2)
         v_s = self.W_V(V).view(batch_size, -1, self.n_heads, self.d_v).transpose(1,2)
 
-        # Assuming attn_mask is initially of shape [batch_size, seq_length]
-        # Expand it to [batch_size, 1, 1, seq_length] to cover the multi-head dimension and the second sequence dimension
-        # Step 1: Unsqueezing to add the necessary dimensions
-        attn_mask = attn_mask.unsqueeze(1).unsqueeze(1)  # Adds dimensions for heads and duplicate seq_length
+        attn_mask = attn_mask.unsqueeze(1).unsqueeze(1)
+        attn_mask = attn_mask.expand(-1, self.n_heads, -1, -1)
 
-        # Step 2: Expanding to match the shape of scores
-        # We need it to be [batch_size, n_heads, seq_length, seq_length]
-        # Use expand with -1 to signify not changing that dimension, and other dimensions to match scores
-        attn_mask = attn_mask.expand(-1, self.n_heads, -1, -1)  # -1 in seq_length places will keep the original seq_length from attn_mask
-
-        # Now apply the expanded mask to the scores
         scores = torch.matmul(q_s, k_s.transpose(-2, -1)) / (self.d_k ** 0.5)
-        scores = scores.masked_fill(attn_mask == 0, float('-inf'))  # Apply masking
+        scores = scores.masked_fill(attn_mask == 0, float('-inf'))
 
         attn = F.softmax(scores, dim=-1)
         context = torch.matmul(attn, v_s).transpose(1, 2).contiguous().view(batch_size, -1, self.n_heads * self.d_v)
@@ -88,8 +78,23 @@ class BERT(nn.Module):
 
     def forward(self, input_ids, attention_mask):
         embedded = self.embedding(input_ids)
+        all_hidden_states = []
         for layer in self.layers:
             embedded = layer(embedded, attention_mask)
+            all_hidden_states.append(embedded)
         logits = self.fc(embedded)
-        return logits
+        return logits, all_hidden_states
 
+    def encode_protein(self, protein_tokens, attention_mask):
+        _, all_hidden_states = self.forward(protein_tokens, attention_mask)
+        final_layer = all_hidden_states[-1]
+        penultimate_layer = all_hidden_states[-2]
+
+        cls_final = final_layer[:, 0, :]  # CLS token representation from the final layer
+        cls_penultimate = penultimate_layer[:, 0, :]  # CLS token representation from the penultimate layer
+
+        max_pool_final = torch.max(final_layer, dim=1)[0]
+        mean_pool_final = torch.mean(final_layer, dim=1)
+
+        fingerprint = torch.cat([max_pool_final, mean_pool_final, cls_final, cls_penultimate], dim=1)
+        return fingerprint
