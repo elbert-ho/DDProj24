@@ -47,3 +47,4 @@ class SMILESDataset(Dataset):
 
     def __getitem__(self, idx):
         return torch.tensor(self.sequences[idx], dtype=torch.long), torch.tensor(self.properties[idx], dtype=torch.float)
+
