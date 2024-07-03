@@ -18,7 +18,7 @@ def train_bpe(sequences, vocab_size):
     tokenizer.train_from_iterator(sequences, trainer)
     return tokenizer
 
-file_path = '../data/smiles_data1000.csv'
+file_path = '../data/smiles_10000_with_props.csv'
 vocab_size = 1000
 sequences = parse_smiles(file_path)
 tokenizer = train_bpe(sequences, vocab_size)
