@@ -59,7 +59,7 @@ class WarmupAnnealingLR:
 # Function to normalize losses based on task-specific scales
 def normalize_loss(loss, task_name,  normalization_factors):
     factor = normalization_factors[task_name]
-    return loss / (factor['mean']**2)
+    return loss / (factor['std']**2)
 
 # Training function with GradNorm
 def train(model, train_loader, criterion_reconstruction, criterion_tasks, optimizer, scheduler, epoch, device, normalization_factors, num_tasks, tgt_vocab_size):
@@ -159,10 +159,11 @@ def validate(model, val_loader, criterion_reconstruction, criterion_tasks, epoch
             
             # Combine losses
             all_losses = torch.cat([loss_reconstruction.unsqueeze(0), losses_tasks])
-            weights = alpha_k / (g_t + 1e-8)
-            weighted_losses = torch.sum(weights * torch.log1p(all_losses))
-
-            total_loss += weighted_losses.item()
+            # weights = alpha_k / (g_t + 1e-8)
+            # weighted_losses = torch.sum(weights * torch.log1p(all_losses))
+            for m, task_name in enumerate(normalization_factors):
+                all_losses[m + 1] = all_losses[m + 1] / (normalization_factors[task_name]['std']**2)
+            total_loss += torch.sum(all_losses).item()
             total_reconstruction_loss += loss_reconstruction.item()
             total_task_losses += losses_tasks.detach()
 
@@ -171,7 +172,7 @@ def validate(model, val_loader, criterion_reconstruction, criterion_tasks, epoch
     avg_task_losses = total_task_losses / len(val_loader)
 
     # Normalize task losses for printing
-    normalized_task_losses = [normalize_loss(avg_task_losses[i], task_name) for i, task_name in enumerate(normalization_factors)]
+    normalized_task_losses = [normalize_loss(avg_task_losses[i], task_name, normalization_factors) for i, task_name in enumerate(normalization_factors)]
 
     print(f"Epoch {epoch}, Validation Loss: {avg_loss}")
     print(f"Epoch {epoch}, Validation Reconstruction Loss: {avg_reconstruction_loss}")
@@ -179,7 +180,7 @@ def validate(model, val_loader, criterion_reconstruction, criterion_tasks, epoch
         print(f"Epoch {epoch}, Validation Task {i+1} Loss: {normalized_task_losses[i]} (Normalized)")
     return avg_loss
 
-def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_rate, batch_size, device):
+def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_rate, batch_size, device, warmup_epochs, total_epochs, patience):
     # Check if CUDA is available
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Hyperparameters
@@ -193,10 +194,7 @@ def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_r
     # dropout = 0.1
     # batch_size = 32
     # learning_rate = 1e-3
-    patience = 5  # Early stopping patience
     num_tasks = 5  # Number of additional tasks
-    warmup_epochs = 10
-    total_epochs = 100
 
     # Initialize the dataset and dataloaderst
     file_path = "data/smiles_10000_with_props.csv"
@@ -219,7 +217,6 @@ def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_r
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     # Initialize average losses
-    average_losses = torch.ones(num_tasks + 1, device=device)  # Including reconstruction loss
 
     scheduler = WarmupAnnealingLR(optimizer, warmup_steps=int(warmup_epochs * train_size / batch_size), total_steps=int(total_epochs * train_size / batch_size), learning_rate=learning_rate)
 
@@ -230,6 +227,8 @@ def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_r
     epoch = 0
     while epochs_no_improve < patience:
         epoch += 1
+        if(epoch >= total_epochs):
+            break
         print(f"Epoch {epoch}")
         g_t, alpha_k = train(model, train_loader, criterion_reconstruction, criterion_tasks, optimizer, scheduler, epoch, device,  normalization_factors, num_tasks, tgt_vocab_size)
         val_loss = validate(model, val_loader, criterion_reconstruction, criterion_tasks, epoch, g_t, alpha_k, device, normalization_factors, num_tasks, tgt_vocab_size)
@@ -238,8 +237,15 @@ def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_r
             best_val_loss = val_loss
             epochs_no_improve = 0
             # Save the best model
-            # torch.save(model.state_dict(), 'models/best_model.pt')
+            torch.save(model.state_dict(), 'models/best_model.pt')
         else:
             epochs_no_improve += 1
 
     print("Training stopped. No improvement in validation loss for {} epochs.".format(patience))
+    return best_val_loss
+
+
+def main():
+    train_and_validate(256, 16, 2, 4000, .13, 2e-4, 16, 'cuda', 9, 100, 7)
+
+main()

@@ -20,7 +20,9 @@ def evaluate_model(model, val_loader, tokenizer, max_length, device):
     total_symbols = 0
 
     with torch.no_grad():
-        for batch in tqdm(val_loader, desc="Evaluating"):
+        for batch_num, batch in enumerate(tqdm(val_loader, desc="Evaluating")):
+            # if(batch_num == 8):
+                # break
             src, task_targets = batch
             src = src.to(device)
             task_targets = task_targets.to(device)
@@ -87,17 +89,16 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 src_vocab_size = 1000
 tgt_vocab_size = 1000
 d_model = 256  # Updated d_model to 128
-num_heads = 8
-num_layers = 6
-d_ff = 2048
+num_heads = 16
+num_layers = 2
+d_ff = 4000
 max_seq_length = 128
-dropout = 0.1
-batch_size = 32
+dropout = 0.13
+batch_size = 16
 learning_rate = 1e-4
 patience = 7  # Early stopping patience
-num_tasks = 5  # Number of additional tasks
-alpha = 1.5  # GradNorm alpha parameter
 reconstruction_loss_weight = 5.0  # Emphasis on reconstruction loss
+num_tasks=5
 
 model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks)
 model.load_state_dict(torch.load('models/best_model.pt'))
