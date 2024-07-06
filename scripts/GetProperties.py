@@ -13,11 +13,11 @@ def esol(mol):
     mol_weight = Descriptors.MolWt(mol)
     num_rotatable_bonds = Descriptors.NumRotatableBonds(mol)
     aromatic_atoms = sum([atom.GetIsAromatic() for atom in mol.GetAtoms()])
-    heavy_atoms = mol.GetNumHeavyAtoms()
+    # heavy_atoms = mol.GetNumHeavyAtoms()
 
     # ESOL equation based on Delaney (2004)
     solubility = (0.16 - 0.63 * logP - 0.0062 * mol_weight +
-                  0.066 * num_rotatable_bonds - 0.74 * aromatic_atoms) / heavy_atoms
+                  0.066 * num_rotatable_bonds - 0.74 * aromatic_atoms)
     return solubility
 
 def calculate_properties(smiles):

@@ -6,6 +6,7 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
+import yaml
 from tokenizers import Tokenizer
 from MolTransformer import MultiTaskTransformer
 from MolLoader import SMILESDataset
@@ -21,8 +22,8 @@ def evaluate_model(model, val_loader, tokenizer, max_length, device):
 
     with torch.no_grad():
         for batch_num, batch in enumerate(tqdm(val_loader, desc="Evaluating")):
-            # if(batch_num == 8):
-                # break
+            if(batch_num == 16):
+                break
             src, task_targets = batch
             src = src.to(device)
             task_targets = task_targets.to(device)
@@ -85,20 +86,29 @@ def evaluate_model(model, val_loader, tokenizer, max_length, device):
         print('No symbols to evaluate.')
 
 # Hyperparameters
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-src_vocab_size = 1000
-tgt_vocab_size = 1000
-d_model = 256  # Updated d_model to 128
-num_heads = 16
-num_layers = 2
-d_ff = 4000
-max_seq_length = 128
-dropout = 0.13
-batch_size = 16
-learning_rate = 1e-4
-patience = 7  # Early stopping patience
-reconstruction_loss_weight = 5.0  # Emphasis on reconstruction loss
-num_tasks=5
+
+with open("hyperparams.yaml", "r") as file:
+    config = yaml.safe_load(file)
+
+src_vocab_size = config["mol_model"]["src_vocab_size"]
+tgt_vocab_size = config["mol_model"]["tgt_vocab_size"]
+max_seq_length = config["mol_model"]["max_seq_length"]
+num_tasks = config["mol_model"]["num_tasks"]
+d_model = config["mol_model"]["d_model"]
+num_heads = config["mol_model"]["num_heads"]
+num_layers = config["mol_model"]["num_layers"]
+d_ff = config["mol_model"]["d_ff"]
+dropout = config["mol_model"]["dropout"]
+learning_rate = config["mol_model"]["learning_rate"]
+batch_size = config["mol_model"]["batch_size"]
+device = config["mol_model"]["device"]
+warmup_epochs = config["mol_model"]["warmup_epochs"]
+total_epochs = config["mol_model"]["total_epochs"]
+patience = config["mol_model"]["patience"]
+pretrain_epochs = config["mol_model"]["pretrain_epochs"]
+pretrain_learning_rate = config["mol_model"]["pretrain_learning_rate"]
+tok_file = config["mol_model"]["tokenizer_file"]
+
 
 model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks)
 model.load_state_dict(torch.load('models/best_model.pt'))
@@ -107,8 +117,8 @@ model.load_state_dict(torch.load('models/best_model.pt'))
 model.to(device)
 
 # Initialize the dataset and dataloaders
-file_path = "data/smiles_10000_with_props.csv"
-smiles_tokenizer = Tokenizer.from_file('models/smiles_tokenizer.json')
+file_path = "data/smiles_50000_with_props.csv"
+smiles_tokenizer = Tokenizer.from_file(tok_file)
 dataset = SMILESDataset(file_path, vocab_size=1000, max_length=128, tokenizer=smiles_tokenizer)
 
 train_size = int(0.8 * len(dataset))

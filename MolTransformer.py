@@ -118,7 +118,7 @@ class MultiTaskTransformer(nn.Module):
         self.fc = nn.Linear(d_model, tgt_vocab_size)
         self.dropout = nn.Dropout(dropout)
 
-        self.task_heads = nn.ModuleList([nn.Linear(d_model * 4, 1) for _ in range(num_tasks)])  # Updated to d_model * 4 for concatenated vectors
+        self.task_heads = nn.ModuleList([nn.Linear(d_model * 3, 1) for _ in range(num_tasks)])
 
     def generate_mask(self, src, tgt):
         src_mask = (src != 0).unsqueeze(1).unsqueeze(2).to(src.device)
@@ -136,8 +136,8 @@ class MultiTaskTransformer(nn.Module):
         enc_output = src_embedded
         for i, enc_layer in enumerate(self.encoder_layers):
             enc_output = enc_layer(enc_output, src_mask)
-            if i == len(self.encoder_layers) - 2:
-                penultimate_output = enc_output
+            # if i == len(self.encoder_layers) - 2:
+                # penultimate_output = enc_output
 
         dec_output = tgt_embedded
         for dec_layer in self.decoder_layers:
@@ -149,10 +149,10 @@ class MultiTaskTransformer(nn.Module):
         mean_pool = enc_output.mean(dim=1)  # Mean pooling
         max_pool = enc_output.max(dim=1)[0]  # Max pooling
         first_token_last_layer = enc_output[:, 0, :]  # First token output of the last layer
-        first_token_penultimate_layer = penultimate_output[:, 0, :]  # First token output of the penultimate layer
+        # first_token_penultimate_layer = penultimate_output[:, 0, :]  # First token output of the penultimate layer
 
         # Concatenate the vectors
-        token_representations = torch.cat([mean_pool, max_pool, first_token_last_layer, first_token_penultimate_layer], dim=1)  # Shape: (batch_size, d_model * 4)
+        token_representations = torch.cat([mean_pool, max_pool, first_token_last_layer], dim=1)  # Shape: (batch_size, d_model * 4)
 
         # Compute task outputs
         task_outputs = torch.cat([head(token_representations) for head in self.task_heads], dim=1)  # Shape: (batch_size, num_tasks)
@@ -167,16 +167,16 @@ class MultiTaskTransformer(nn.Module):
         first_token_penultimate_layer = None # First token output of the penultimate layer
         for i, enc_layer in enumerate(self.encoder_layers):
             enc_output = enc_layer(enc_output, (src != 0).unsqueeze(1).unsqueeze(2).to(src.device))
-            if i == len(self.encoder_layers) - 2:
-                penultimate_output = enc_output
-                first_token_penultimate_layer = penultimate_output[:, 0, :]
+            # if i == len(self.encoder_layers) - 2:
+                # penultimate_output = enc_output
+                # first_token_penultimate_layer = penultimate_output[:, 0, :]
         mean_pool = enc_output.mean(dim=1)  # Mean pooling
         max_pool = enc_output.max(dim=1)[0]  # Max pooling
         first_token_last_layer = enc_output[:, 0, :]  # First token output of the last layer
-        first_token_penultimate_layer = penultimate_output[:, 0, :]  # First token output of the penultimate layer
+        # first_token_penultimate_layer = penultimate_output[:, 0, :]  # First token output of the penultimate layer
 
         # Concatenate the vectors
-        fingerprint = torch.cat([mean_pool, max_pool, first_token_last_layer, first_token_penultimate_layer], dim=1)  # Shape: (batch_size, d_model * 4)
+        fingerprint = torch.cat([mean_pool, max_pool, first_token_last_layer], dim=1)  # Shape: (batch_size, d_model * 4)
 
         return enc_output, fingerprint
 

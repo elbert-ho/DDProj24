@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class DiffusionModel(nn.Module):
-    def __init__(self, unet_model, num_diffusion_steps=1000):
+    def __init__(self, unet_model, num_diffusion_steps):
         super(DiffusionModel, self).__init__()
         self.unet_model = unet_model
         self.num_diffusion_steps = num_diffusion_steps

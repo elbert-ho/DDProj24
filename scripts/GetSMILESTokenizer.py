@@ -3,7 +3,6 @@ from tokenizers import Tokenizer, models, pre_tokenizers, trainers, normalizers
 
 def parse_smiles(file_path):
     smiles_list = []
-    properties = []
     with open(file_path, 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -18,9 +17,9 @@ def train_bpe(sequences, vocab_size):
     tokenizer.train_from_iterator(sequences, trainer)
     return tokenizer
 
-file_path = '../data/smiles_10000_with_props.csv'
+file_path = '../data/smiles_10000_selected_features.csv'
 vocab_size = 1000
 sequences = parse_smiles(file_path)
 tokenizer = train_bpe(sequences, vocab_size)
-save_path = '../models/smiles_tokenizer.json'
+save_path = '../models/smiles_tokenizer_10K_full.json'
 tokenizer.save(save_path)

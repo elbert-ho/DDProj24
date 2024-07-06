@@ -1,0 +1,47 @@
+mol_model:
+  d_model: 256
+  num_heads: 8
+  num_layers: 2
+  d_ff: 2048
+  src_vocab_size: 1000
+  tgt_vocab_size: 1000
+  max_seq_length: 128
+  num_tasks: 5
+  dropout: .1
+  learning_rate: 2.0e-4
+  batch_size: 32
+  device: "cuda"
+  warmup_epochs: 10
+  total_epochs: 200
+  patience: 7
+  pretrain_epochs: 10
+  pretrain_learning_rate: 1.0e-4
+  tokenizer_file: "models/smiles_tokenizer_10K_full.json"
+  
+protein_model:
+  protein_embedding_dim: 640
+
+diffusion_model:
+  epochs: 10
+  batch_size: 32
+  lr: 1.0e-4
+  num_diffusion_steps: 1000
+  patience: 5
+
+prop_model:
+  batch_size: 32
+  patience: 5
+  learning_rate: 1.0e-4
+  time_embed_dim: 128
+
+pIC50_model:
+  batch_size: 32
+  hidden_dim: 256
+  num_heads: 8
+  lr: 1.0e-4
+  num_epochs: 100
+  patience: 5
+  time_embed_dim: 128
+
+UNet:
+  time_embedding_dim: 128

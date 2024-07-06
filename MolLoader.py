@@ -10,15 +10,17 @@ class SMILESDataset(Dataset):
         self.sequences, self.properties, self.tokenizer = self.process_data(file_path, vocab_size, max_length, tokenizer)
         self.max_length = max_length
 
-    def process_data(self, file_path, vocab_size, max_length, tokenizer=None):
+    def process_data(self, file_path, vocab_size, max_length,  tokenizer=None):
         def parse_smiles(file_path):
             smiles_list = []
             properties = []
             with open(file_path, 'r') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
+                    # print(row)
                     smiles_list.append(row['SMILES'])
-                    properties.append([float(row['logP']), float(row['tpsa']), float(row['h_donors']), float(row['h_acceptors']), float(row['solubility'])])  # Add your properties here
+                    properties.append([float(value) for key, value in row.items() if key != 'SMILES'])  # Dynamically add all properties except 'SMILES'
+                    # properties.append([float(row['logP']), float(row['tpsa']), float(row['h_donors']), float(row['h_acceptors']), float(row['solubility'])])  # Add your properties here
             return smiles_list, properties
 
         def train_bpe(sequences, vocab_size):

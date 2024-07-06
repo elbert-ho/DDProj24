@@ -3,11 +3,20 @@ import torch.optim as optim
 from torch.utils.data import random_split, DataLoader
 from MolPropLoader import MolPropDataset
 from MolPropModel import PropertyModel
+from DiffusionModel import DiffusionModel
 import torch.nn as nn
 from tqdm import tqdm
-
+import yaml
 # Load the dataset
-dataset = MolPropDataset(smiles_fingerprint_file='data/smiles_fingerprint.npy', qed_file='data/qed.npy', sas_file = 'data/sas.npy')
+
+with open("hyperparams.yaml", "r") as file:
+    config = yaml.safe_load(file)
+
+num_diffusion_steps = config["diffusion_model"]["num_diffusion_steps"]
+
+diffusion_model = DiffusionModel(num_diffusion_steps=num_diffusion_steps)
+
+dataset = MolPropDataset(smiles_file='data/smiles_output.npy', qed_file='data/qed.npy', sas_file = 'data/sas.npy', diffusion_model=diffusion_mode, num_diffusion_steps=num_diffusion_steps)
 
 # Split into train and validation sets
 train_size = int(0.8 * len(dataset))
@@ -15,22 +24,24 @@ val_size = len(dataset) - train_size
 train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
 # Create data loaders
-batch_size = 64
+batch_size = config["prop_model"]["batch_size"]
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 # Initialize models
-input_size = dataset[0][0].shape[0]
-qed_model = PropertyModel(input_size)
-sas_model = PropertyModel(input_size)
+input_size = config["mol_model"]["d_model"] * config["mol_model"]["max_seq_length"]
+lr = config["prop_model"]["learning_rate"]
+time_embed_dim = config["prop_model"]["time_embed_dim"]
+qed_model = PropertyModel(input_size, num_diffusion_steps, time_embed_dim) # FIX
+sas_model = PropertyModel(input_size, num_diffusion_steps, time_embed_dim)
 
 # Define loss function and optimizers
 criterion = nn.MSELoss()
-qed_optimizer = optim.Adam(qed_model.parameters(), lr=0.001)
-sas_optimizer = optim.Adam(sas_model.parameters(), lr=0.001)
+qed_optimizer = optim.Adam(qed_model.parameters(), lr=lr)
+sas_optimizer = optim.Adam(sas_model.parameters(), lr=lr)
 
 # Early stopping parameters
-patience = 5
+patience = config["prop_model"]["patience"]
 best_val_loss = float('inf')
 patience_counter = 0
 
@@ -44,14 +55,14 @@ while patience_counter < patience:
     train_qed_loss = 0.0
     train_sas_loss = 0.0
 
-    for inputs, qeds, sas in tqdm(train_loader, desc=f"Epoch {epoch} [Training]"):
+    for inputs, time_step, qeds, sas in tqdm(train_loader, desc=f"Epoch {epoch} [Training]"):
         # Zero the parameter gradients
         qed_optimizer.zero_grad()
         sas_optimizer.zero_grad()
 
         # Forward pass
-        qed_outputs = qed_model(inputs)
-        sas_outputs = sas_model(inputs)
+        qed_outputs = qed_model(inputs, time_step)
+        sas_outputs = sas_model(inputs, time_step)
 
         # Calculate loss
         qed_loss = criterion(qed_outputs.squeeze(), qeds)

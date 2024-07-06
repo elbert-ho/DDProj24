@@ -1,0 +1,4 @@
+src_vocab_size: 1000
+tgt_vocab_size: 1000
+max_seq_length: 128
+num_tasks: 5
