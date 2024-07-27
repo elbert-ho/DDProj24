@@ -357,10 +357,10 @@ def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_r
         step = train(model, train_loader, criterion_reconstruction, criterion_tasks, epoch, device, normalization_factors, num_tasks, tgt_vocab_size, warmup_steps, total_steps, learning_rate, total_shared_params, total_head_params, pretrain_steps, pretrain_learning_rate, step)
         val_loss = validate(model, val_loader, criterion_reconstruction, criterion_tasks, epoch, device, normalization_factors, num_tasks, tgt_vocab_size)
 
-        if not trial is None and epoch > pretrain_epochs + 10 and epoch >= 20:
-            trial.report(val_loss, epoch)
-            if trial.should_prune():
-                raise optuna.TrialPruned()
+        # if not trial is None and epoch > pretrain_epochs + 10 and epoch >= 20:
+        #     trial.report(val_loss, epoch)
+        #     if trial.should_prune():
+        #         raise optuna.TrialPruned()
         
         if epoch > pretrain_epochs:
             if val_loss < best_val_loss:

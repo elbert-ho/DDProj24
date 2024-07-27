@@ -7,7 +7,7 @@ from pIC50Predictor import pIC50Predictor
 from torch.utils.data import Dataset, DataLoader, random_split
 import torch.nn as nn
 
-def train(model, train_dataloader, val_dataloader, criterion, optimizer, device, num_epochs=100, patience=10):
+def train(model, train_dataloader, val_dataloader, criterion, optimizer, device, max_seq_length, d_model, num_epochs=100, patience=10):
     model.to(device)
     best_val_loss = float('inf')
     patience_counter = 0
@@ -17,13 +17,23 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
         train_loss = 0.0
 
         for noised_molecule, protein, time_step, pIC50 in train_dataloader:
-            noised_molecule = noised_molecule.to(device).squeeze(1)
+            # Move tensors to device
+            noised_molecule = noised_molecule.to(device)
             protein = protein.to(device).squeeze(1)
             time_step = time_step.to(device).squeeze(1)
             pIC50 = pIC50.to(device)
 
+            noised_molecule = noised_molecule.reshape(-1, max_seq_length, d_model)
+            
+            mean_pool = noised_molecule.mean(dim=1)  # Mean pooling
+            max_pool = noised_molecule.max(dim=1)[0]  # Max pooling
+            first_token_last_layer = noised_molecule[:, 0, :]  # First token output of the last layer
+
+            # Concatenate the vectors
+            token_representations = torch.cat([mean_pool, max_pool, first_token_last_layer], dim=1)
+
             optimizer.zero_grad()
-            outputs = model(noised_molecule, protein, time_step)
+            outputs = model(token_representations, protein, time_step)
             loss = criterion(outputs.squeeze(), pIC50)
             loss.backward()
             optimizer.step()
@@ -36,12 +46,21 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
         val_loss = 0.0
         with torch.no_grad():
             for noised_molecule, protein, time_step, pIC50 in val_dataloader:
-                noised_molecule = noised_molecule.to(device).squeeze(1)
+                # Move tensors to device
+                noised_molecule = noised_molecule.to(device)
                 protein = protein.to(device).squeeze(1)
                 time_step = time_step.to(device).squeeze(1)
                 pIC50 = pIC50.to(device)
 
-                outputs = model(noised_molecule, protein, time_step)
+                noised_molecule = noised_molecule.reshape(-1, max_seq_length, d_model)
+            
+                mean_pool = noised_molecule.mean(dim=1)  # Mean pooling
+                max_pool = noised_molecule.max(dim=1)[0]  # Max pooling
+                first_token_last_layer = noised_molecule[:, 0, :]  # First token output of the last layer
+                # Concatenate the vectors
+                token_representations = torch.cat([mean_pool, max_pool, first_token_last_layer], dim=1)
+
+                outputs = model(token_representations, protein, time_step)
                 loss = criterion(outputs.squeeze(), pIC50)
                 val_loss += loss.item()
 
@@ -59,7 +78,6 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
                 break
 
 # Load your dataset
-# Ensure you have defined the DiffusionModel and pIC50Dataset classes
 protein_file = 'data/protein_embeddings.npy'
 smiles_file = 'data/smiles_output.npy'
 pIC50_file = 'data/pIC50.npy'
@@ -83,7 +101,10 @@ train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True
 val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 # Model parameters
-molecule_dim = config["mol_model"]["d_model"] * config["mol_model"]["max_seq_length"]
+d_model = config["mol_model"]["d_model"]
+max_seq_length = config["mol_model"]["max_seq_length"]
+
+molecule_dim = d_model * 3
 protein_dim = config["protein_model"]["protein_embedding_dim"]
 hidden_dim = config["pIC50_model"]["hidden_dim"]
 num_heads = config["pIC50_model"]["num_heads"]
@@ -99,5 +120,5 @@ criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 # Train the model
-train(model, train_dataloader, val_dataloader, criterion, optimizer, device, num_epochs, patience)
+train(model, train_dataloader, val_dataloader, criterion, optimizer, device, max_seq_length, d_model, num_epochs, patience)
 torch.save(model.state_dict(), 'models/pIC50_model.pt')

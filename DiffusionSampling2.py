@@ -8,8 +8,16 @@ from UNet import UNet1D
 import yaml
 import numpy as np
 import gc
+import pandas as pd
+from Bio import SeqIO
+from rdkit import Chem
 
-def sample(diffusion_model, pic50_model, qed_model, sas_model, mol_transformer, tokenizer, protein_embedding, num_steps, gradient_scale, device, molecule_dim):
+# Function to check validity of SMILES
+def is_valid_smiles(smiles):
+    return Chem.MolFromSmiles(smiles) is not None
+
+# Function to sample SMILES strings
+def sample(diffusion_model, pic50_model, qed_model, sas_model, mol_transformer, tokenizer, protein_embedding, num_steps, gradient_scale, device, molecule_dim, max_seq_length, d_model):
     scaler = torch.cuda.amp.GradScaler()
     x = torch.randn(1, 1, molecule_dim, device=device, requires_grad=True)
     eps = 1e-8
@@ -60,6 +68,32 @@ def sample(diffusion_model, pic50_model, qed_model, sas_model, mol_transformer, 
     
     return decoded_smiles
 
+# Sample multiple SMILES for each protein
+def sample_multiple_smiles(num_samples, diffusion_model, pic50_model, qed_model, sas_model, mol_transformer, tokenizer, protein_embedding, num_steps, gradient_scale, device, molecule_dim, max_seq_length, d_model):
+    smiles_list = []
+    for _ in range(num_samples):
+        sampled_smiles = sample(diffusion_model, pic50_model, qed_model, sas_model, mol_transformer, tokenizer, protein_embedding, num_steps, gradient_scale, device, molecule_dim, max_seq_length, d_model)
+        smiles_str = tokenizer.decode(sampled_smiles.detach().cpu().flatten().tolist(), skip_special_tokens=True)
+        smiles_list.append(smiles_str)
+    return smiles_list
+
+# Evaluate validity, uniqueness, and novelty
+def evaluate_smiles(smiles_list, known_smiles_set):
+    valid_smiles = [smiles for smiles in smiles_list if is_valid_smiles(smiles)]
+    unique_smiles = set(valid_smiles)
+    novel_smiles = [smiles for smiles in unique_smiles if smiles not in known_smiles_set]
+
+    num_valid = len(valid_smiles)
+    num_unique = len(unique_smiles)
+    num_novel = len(novel_smiles)
+
+    total = len(smiles_list)
+    valid_percentage = (num_valid / total) * 100
+    unique_percentage = (num_unique / total) * 100
+    novel_percentage = (num_novel / total) * 100
+
+    return valid_percentage, unique_percentage, novel_percentage
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 with open("hyperparams.yaml", "r") as file:
@@ -105,12 +139,34 @@ mol_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_he
 mol_model.load_state_dict(torch.load('models/pretrain.pt', map_location=device))
 tokenizer = Tokenizer.from_file(tok_file)
 
+# Load known SMILES (you can adjust this based on your known set)
+known_smiles_set = set()  # Add known SMILES strings to this set
+
+# Load protein embeddings
 proteins = np.load('data/protein_embeddings.npy')
-protein_embedding = torch.FloatTensor(proteins[10]).to(device)
 
-# Call the sample function
-sampled_smiles = sample(diffusion_model, pretrained_pic50_model, pretrained_qed_model, pretrained_sas_model, mol_model, tokenizer, protein_embedding, num_steps=num_diffusion_steps, gradient_scale=gradient_scale, device=device, molecule_dim=molecule_dim)
-print(sampled_smiles.detach().cpu().flatten())
-predicted_smiles = tokenizer.decode(sampled_smiles.detach().cpu().flatten().tolist(), skip_special_tokens=True)
+# Prepare the CSV output
+output_csv = 'path/to/your/output_file.csv'
+csv_rows = []
 
-print("Sampled SMILES:", predicted_smiles)
+# Iterate through proteins and sample SMILES
+for idx, protein_embedding in enumerate(proteins):
+    protein_embedding = torch.FloatTensor(protein_embedding).to(device)
+    smiles_list = sample_multiple_smiles(10, diffusion_model, pretrained_pic50_model, pretrained_qed_model, pretrained_sas_model, mol_model, tokenizer, protein_embedding, num_steps=num_diffusion_steps, gradient_scale=gradient_scale, device=device, molecule_dim=molecule_dim, max_seq_length=max_seq_length, d_model=d_model)
+
+    for smiles in smiles_list:
+        csv_rows.append({
+            "Protein Sequence": f"Protein_{idx}",
+            "SMILES String": smiles
+        })
+
+# Write the CSV file
+csv_df = pd.DataFrame(csv_rows)
+csv_df.to_csv(output_csv, index=False)
+
+# Evaluate the SMILES
+valid_percentage, unique_percentage, novel_percentage = evaluate_smiles([row["SMILES String"] for row in csv_rows], known_smiles_set)
+
+print(f"Valid SMILES: {valid_percentage:.2f}%")
+print(f"Unique SMILES: {unique_percentage:.2f}%")
+print(f"Novel SMILES: {novel_percentage:.2f}%")

@@ -6,7 +6,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPRegressor, MLPClassifier
 from sklearn.multioutput import MultiOutputClassifier, MultiOutputRegressor
-from sklearn.metrics import root_mean_squared_error, roc_auc_score
+from sklearn.metrics import root_mean_squared_error, roc_auc_score, precision_recall_curve, auc
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import yaml
@@ -39,7 +39,7 @@ tok_file = config["mol_model"]["tokenizer_file"]
 
 
 model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks)
-model.load_state_dict(torch.load('models/best_model.pt'))
+model.load_state_dict(torch.load('models/no_pretrain.pt'))
 # Ensure the model is on the correct device
 model.to(device)
 smiles_tokenizer = Tokenizer.from_file(tok_file)
@@ -69,7 +69,7 @@ def extract_morgan(smiles, targets):
         y = pd.concat([y, targets.iloc[[i]]], ignore_index=True)
     return np.array(X), y
 
-def train_ecfp(data_path, target_columns, is_classification=False, n_repeats=5):
+def train_ecfp(data_path, target_columns, is_classification=False, n_repeats=5, is_special=False):
     data = pd.read_csv(data_path)
     data = data.dropna()
 
@@ -81,14 +81,18 @@ def train_ecfp(data_path, target_columns, is_classification=False, n_repeats=5):
 
     # Initialize model
     keys = data.keys()[1:]
-    if is_classification:
-        model = MLPClassifier(max_iter=1000)
-        metric = roc_auc_score
-        metric_name = 'ROC-AUC'
+    if not is_special:
+        if is_classification:
+            model = MLPClassifier(max_iter=1000)
+            metric = roc_auc_score
+            metric_name = 'ROC-AUC'
+        else:
+            model = MLPRegressor(max_iter=1000)
+            metric = root_mean_squared_error
+            metric_name = 'RMSE'
     else:
-        model = MLPRegressor(max_iter=1000)
-        metric = root_mean_squared_error
-        metric_name = 'RMSE'
+        model = MLPClassifier(max_iter=1000)
+        metric_name = 'PR-AUC'
     
     # Prepare for plotting
     train_sizes = [.0125, .025, .05, .1, .2, .4, .8]
@@ -105,17 +109,30 @@ def train_ecfp(data_path, target_columns, is_classification=False, n_repeats=5):
                 y_cur = y[key].to_numpy()
                 if(len(y_cur) * train_size <= 1):
                     continue
-                X_train, X_test, y_train, y_test = train_test_split(X, y_cur, train_size=train_size, random_state=0, stratify=y_cur)
+                
+                if is_classification:
+                    X_train, X_test, y_train, y_test = train_test_split(X, y_cur, train_size=train_size, random_state=0, stratify=y_cur)
+
+                else:
+                    X_train, X_test, y_train, y_test = train_test_split(X, y_cur, train_size=train_size, random_state=0)
+
                 model.fit(X_train, y_train)
                 if is_classification:
                     y_pred = model.predict_proba(X_test)
                 else:
                     y_pred = model.predict(X_test)
-
-                if is_classification:
-                    total[i] = metric(y_test, y_pred[:,1])
+                
+                if not is_special:
+                    if is_classification:
+                        total[i] = metric(y_test, y_pred[:,1])
+                    else:
+                        total[i] = metric(y_test, y_pred)
                 else:
-                    total[i] = metric(y_test, y_pred)
+                    # Calculate precision and recall values
+                    precision, recall, _ = precision_recall_curve(y_test, y_pred[:,1])
+                    # Calculate the area under the curve
+                    total[i] = auc(recall, precision)
+                         
 
             overall.append(np.mean(total))
         metrics.append(np.mean(overall))
@@ -127,7 +144,7 @@ def train_ecfp(data_path, target_columns, is_classification=False, n_repeats=5):
 
 
 # Function to train and plot for a single dataset
-def train_and_plot(data_path, target_columns, model, is_classification=False, n_repeats=5, title="Plot"):
+def train_and_plot(data_path, target_columns, model, is_classification=False, n_repeats=5, title="Plot", is_special=False):
     # Load dataset
     data = pd.read_csv(data_path)
     
@@ -145,14 +162,18 @@ def train_and_plot(data_path, target_columns, model, is_classification=False, n_
     y = data[target_columns]
 
     keys = data.keys()[1:]
-    if is_classification:
-        model = MLPClassifier(max_iter=1000)
-        metric = roc_auc_score
-        metric_name = 'ROC-AUC'
+    if not is_special:
+        if is_classification:
+            model = MLPClassifier(max_iter=1000)
+            metric = roc_auc_score
+            metric_name = 'ROC-AUC'
+        else:
+            model = MLPRegressor(max_iter=1000)
+            metric = root_mean_squared_error
+            metric_name = 'RMSE'
     else:
-        model = MLPRegressor(max_iter=1000)
-        metric = root_mean_squared_error
-        metric_name = 'RMSE'
+        model = MLPClassifier(max_iter=1000)
+        metric_name = 'PR-AUC'
     
     # Prepare for plotting
     train_sizes = [.0125, .025, .05, .1, .2, .4, .8]
@@ -169,17 +190,29 @@ def train_and_plot(data_path, target_columns, model, is_classification=False, n_
                 y_cur = y[key].to_numpy()
                 if(len(y_cur) * train_size <= 1):
                     continue
-                X_train, X_test, y_train, y_test = train_test_split(X, y_cur, train_size=train_size, random_state=0, stratify=y_cur)
+
+                if is_classification:
+                    X_train, X_test, y_train, y_test = train_test_split(X, y_cur, train_size=train_size, random_state=0, stratify=y_cur)
+                else:
+                    X_train, X_test, y_train, y_test = train_test_split(X, y_cur, train_size=train_size, random_state=0)
+
                 model.fit(X_train, y_train)
                 if is_classification:
                     y_pred = model.predict_proba(X_test)
                 else:
                     y_pred = model.predict(X_test)
 
-                if is_classification:
-                    total[i] = metric(y_test, y_pred[:,1])
+                if not is_special:
+                    if is_classification:
+                        total[i] = metric(y_test, y_pred[:,1])
+                    else:
+                        total[i] = metric(y_test, y_pred)
                 else:
-                    total[i] = metric(y_test, y_pred)
+                    # Calculate precision and recall values
+                    precision, recall, _ = precision_recall_curve(y_test, y_pred[:,1])
+                    # Calculate the area under the curve
+                    total[i] = auc(recall, precision)
+                         
 
             overall.append(np.mean(total))
         metrics.append(np.mean(overall))
@@ -202,28 +235,32 @@ def train_and_plot(data_path, target_columns, model, is_classification=False, n_
 # Train and plot for each relevant CSV file
 
 datasets_info = [
-    ('mol_net_datasets/clintox_relevant.csv', ['FDA_APPROVED', 'CT_TOX'], 'ClinTox', True),
+    ('mol_net_datasets/clintox_relevant.csv', ['FDA_APPROVED', 'CT_TOX'], 'ClinTox', True, False),
     ('mol_net_datasets/sider_relevant.csv', ['Hepatobiliary disorders', 'Metabolism and nutrition disorders', 'Product issues', 
                                      'Eye disorders', 'Investigations', 'Musculoskeletal and connective tissue disorders', 
                                      'Gastrointestinal disorders', 'Social circumstances', 'Immune system disorders', 
-                                     'Reproductive system and breast disorders'], 'SIDER', True),
+                                     'Reproductive system and breast disorders'], 'SIDER', True, False),
     ('mol_net_datasets/tox21_relevant.csv', ['NR-AR', 'NR-AR-LBD', 'NR-AhR', 'NR-Aromatase', 'NR-ER', 'NR-ER-LBD', 
-                                     'NR-PPAR-gamma', 'SR-ARE', 'SR-ATAD5', 'SR-HSE', 'SR-MMP', 'SR-p53'], 'Tox21', True),
-    ('mol_net_datasets/bbbp_relevant.csv', ['p_np'], 'BBBP', True),
-    ('mol_net_datasets/bace_relevant.csv', ['Class'], 'BACE', True),
-    ('mol_net_datasets/hiv_relevant.csv', ['HIV_active'], 'HIV', True),
-    ('mol_net_datasets/lipophilicity_relevant.csv', ['exp'], 'Lipophilicity', False),
-    ('mol_net_datasets/free_solv_relevant.csv', ['expt'], 'FreeSolv', False),
-    ('mol_net_datasets/esol_relevant.csv', ['ESOL predicted log solubility in mols per litre'], 'ESOL', False)
+                                     'NR-PPAR-gamma', 'SR-ARE', 'SR-ATAD5', 'SR-HSE', 'SR-MMP', 'SR-p53'], 'Tox21', True, False),
+    ('mol_net_datasets/bbbp_relevant.csv', ['p_np'], 'BBBP', True, False),
+    ('mol_net_datasets/bace_relevant.csv', ['Class'], 'BACE', True, False),
+    ('mol_net_datasets/hiv_relevant.csv', ['HIV_active'], 'HIV', True, False),
+    ('mol_net_datasets/lipophilicity_relevant.csv', ['exp'], 'Lipophilicity', False, False),
+    ('mol_net_datasets/free_solv_relevant.csv', ['expt'], 'FreeSolv', False, False),
+    ('mol_net_datasets/esol_relevant.csv', ['ESOL predicted log solubility in mols per litre'], 'ESOL', False, False)
 ]
+
+# datasets_info = [
+#     ('mol_net_datasets/muv_relevant.csv', ['MUV-466','MUV-548','MUV-600','MUV-644','MUV-652','MUV-689','MUV-692','MUV-712'], 'MUV', True, True),
+# ]
 
 # Create subplots
 
 # Loop through each dataset info and create a plot
-for i, (data_path, target_columns, title, is_classification) in enumerate(datasets_info):
+for i, (data_path, target_columns, title, is_classification, is_special) in enumerate(datasets_info):
     plt.figure(figsize=([10,8]))
-    train_and_plot(data_path, target_columns, model, is_classification, 5, title)
-    train_ecfp(data_path, target_columns, is_classification, n_repeats=5)
+    train_and_plot(data_path, target_columns, model, is_classification, 5, title, is_special)
+    train_ecfp(data_path, target_columns, is_classification, n_repeats=5, is_special=is_special)
     print("FINISHED")
     plt.legend(loc="upper right")
     plt.savefig(f"mol_net_datasets/images/{title}.png")

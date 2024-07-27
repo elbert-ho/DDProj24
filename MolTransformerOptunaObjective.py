@@ -5,9 +5,9 @@ import os
 
 def objective(trial):
     # Suggest categorical hyperparameters
-    d_model = trial.suggest_categorical('d_model', [128, 256, 512])
+    d_model = trial.suggest_categorical('d_model', [128, 256])
     num_heads = trial.suggest_categorical('num_heads', [4, 8, 16])
-    num_layers = trial.suggest_int('num_layers', 2, 8)
+    num_layers = trial.suggest_int('num_layers', 2, 4)
     d_ff = trial.suggest_int('d_ff', 512, 4096)
     batch_size = trial.suggest_categorical('batch_size', [16, 32, 64])
     patience = trial.suggest_int('patience', 3, 10)

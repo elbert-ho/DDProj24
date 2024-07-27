@@ -90,10 +90,8 @@ for batch_index in tqdm.tqdm(range(num_batches)):
         smiles_string = row['SMILES String']
         pIC50 = row['pIC50']
 
-        # Tokenize the protein sequence
-        encoded_protein = protein_tokenizer(protein_sequence, return_tensors='pt', padding=True, truncation=True).to('cuda')
-
         if ESM:
+            encoded_protein = protein_tokenizer(protein_sequence, return_tensors='pt', padding=True, truncation=True).to('cuda')
             # Generate protein embeddings
             with torch.no_grad():
                 protein_outputs = protein_model(**encoded_protein)
@@ -131,8 +129,8 @@ for batch_index in tqdm.tqdm(range(num_batches)):
 
         # Clean up
         if ESM:
-            del protein_outputs
-        del encoded_protein, encoded_smiles, smiles_output
+            del protein_outputs, encoded_protein
+        del encoded_smiles, smiles_output
         torch.cuda.empty_cache()
         gc.collect()
 
@@ -152,6 +150,8 @@ def load_batches(pattern):
 
 if ESM:
     protein_embeddings_array = load_batches('protein_embeddings_batch_')
+    np.save('data/protein_embeddings.npy', protein_embeddings_array)
+
 smiles_output_array = load_batches('smiles_output_batch_')
 smiles_fingerprint_array = load_batches('smiles_fingerprint_batch_')
 pIC50_array = load_batches('pIC50_batch_')
@@ -159,7 +159,6 @@ qed_array = load_batches('qed_batch_')
 sas_array = load_batches('sas_batch_')
 
 # Save the concatenated results
-np.save('data/protein_embeddings.npy', protein_embeddings_array)
 np.save('data/smiles_output.npy', smiles_output_array)
 np.save('data/smiles_fingerprint.npy', smiles_fingerprint_array)
 np.save('data/pIC50.npy', pIC50_array)

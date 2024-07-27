@@ -8,7 +8,7 @@ mol_model:
   max_seq_length: 128
   num_tasks: 5
   dropout: .1
-  learning_rate: 2.0e-4
+  learning_rate: 1.0e-4
   batch_size: 32
   device: "cuda"
   warmup_epochs: 10
@@ -19,28 +19,30 @@ mol_model:
   tokenizer_file: "models/smiles_tokenizer_10K_full.json"
   
 protein_model:
-  protein_embedding_dim: 640
+  protein_embedding_dim: 1280
 
 diffusion_model:
-  epochs: 10
+  epochs: 100
   batch_size: 32
   lr: 1.0e-4
   num_diffusion_steps: 1000
   patience: 5
+  lambda_vlb: .001
+  gradient_scale: 0.1
 
 prop_model:
   batch_size: 32
-  patience: 5
+  patience: 15
   learning_rate: 1.0e-4
   time_embed_dim: 128
 
 pIC50_model:
   batch_size: 32
-  hidden_dim: 256
+  hidden_dim: 1024
   num_heads: 8
   lr: 1.0e-4
   num_epochs: 100
-  patience: 5
+  patience: 7
   time_embed_dim: 128
 
 UNet:

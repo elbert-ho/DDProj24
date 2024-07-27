@@ -18,9 +18,12 @@ class SinPosEmb(nn.Module):
         return emb
 
 def getTimeMLP(dim, theta, time_dim):
-    return nn.Sequential(
+    dim = int(dim)  # Ensure dim is an integer
+    model = nn.Sequential(
             SinPosEmb(dim, theta),
             nn.Linear(dim, time_dim),
             nn.GELU(),
             nn.Linear(time_dim, time_dim),
             )
+    model = model.to('cuda')
+    return model

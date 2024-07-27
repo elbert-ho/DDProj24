@@ -212,8 +212,9 @@ class MultiTaskTransformer(nn.Module):
             if eos_index.numel() > 0:
                 decoded_sequence[i, eos_index[0]+1:] = tokenizer.token_to_id("[PAD]")
 
-
-        # Compute task outputs
-        task_outputs = torch.cat([head(fingerprint) for head in self.task_heads], dim=1)  # Shape: (batch_size, num_tasks)
+        task_outputs = None
+        if fingerprint is not None:
+            # Compute task outputs
+            task_outputs = torch.cat([head(fingerprint) for head in self.task_heads], dim=1)  # Shape: (batch_size, num_tasks)
 
         return decoded_sequence, task_outputs

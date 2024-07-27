@@ -8,8 +8,10 @@ import torch.nn as nn
 from tqdm import tqdm
 import yaml
 
-# Load the dataset
+# Load the device
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# Load the dataset and configuration
 with open("hyperparams.yaml", "r") as file:
     config = yaml.safe_load(file)
 
@@ -30,13 +32,11 @@ train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 # Initialize models
-input_size = config["mol_model"]["d_model"] * config["mol_model"]["max_seq_length"]
+input_size = config["mol_model"]["d_model"] * 3
 lr = config["prop_model"]["learning_rate"]
 time_embed_dim = config["prop_model"]["time_embed_dim"]
 d_model = config["mol_model"]["d_model"]
 max_seq_length = config["mol_model"]["max_seq_length"]
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 qed_model = PropertyModel(input_size, num_diffusion_steps, time_embed_dim).to(device)
 sas_model = PropertyModel(input_size, num_diffusion_steps, time_embed_dim).to(device)
@@ -69,9 +69,18 @@ while patience_counter < patience:
         qed_optimizer.zero_grad()
         sas_optimizer.zero_grad()
 
+        noised_molecule = inputs.reshape(-1, max_seq_length, d_model)
+        
+        mean_pool = noised_molecule.mean(dim=1)  # Mean pooling
+        max_pool = noised_molecule.max(dim=1)[0]  # Max pooling
+        first_token_last_layer = noised_molecule[:, 0, :]  # First token output of the last layer
+
+        # Concatenate the vectors
+        token_representations = torch.cat([mean_pool, max_pool, first_token_last_layer], dim=1)
+
         # Forward pass
-        qed_outputs = qed_model(inputs, time_step)
-        sas_outputs = sas_model(inputs, time_step)
+        qed_outputs = qed_model(token_representations, time_step)
+        sas_outputs = sas_model(token_representations, time_step)
 
         # Calculate loss
         qed_loss = criterion(qed_outputs.squeeze(), qeds)
@@ -100,9 +109,19 @@ while patience_counter < patience:
         for inputs, time_step, qeds, sas in tqdm(val_loader, desc=f"Epoch {epoch} [Validation]"):
             # Move tensors to device
             inputs, time_step, qeds, sas = inputs.to(device), time_step.to(device), qeds.to(device), sas.to(device)
+            noised_molecule = inputs.reshape(-1, max_seq_length, d_model)
+            
+            mean_pool = noised_molecule.mean(dim=1)  # Mean pooling
+            max_pool = noised_molecule.max(dim=1)[0]  # Max pooling
+            first_token_last_layer = noised_molecule[:, 0, :]  # First token output of the last layer
 
-            qed_outputs = qed_model(inputs, time_step)
-            sas_outputs = sas_model(inputs, time_step)
+            # Concatenate the vectors
+            token_representations = torch.cat([mean_pool, max_pool, first_token_last_layer], dim=1)
+
+            # Forward pass
+            qed_outputs = qed_model(token_representations, time_step)
+            sas_outputs = sas_model(token_representations, time_step)
+
 
             qed_loss = criterion(qed_outputs.squeeze(), qeds)
             sas_loss = criterion(sas_outputs.squeeze(), sas)
@@ -125,6 +144,6 @@ while patience_counter < patience:
     else:
         patience_counter += 1
 
-
+# Save models
 torch.save(qed_model.state_dict(), 'models/qed_model.pt')
 torch.save(sas_model.state_dict(), 'models/sas_model.pt')

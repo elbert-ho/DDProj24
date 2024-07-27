@@ -13,6 +13,9 @@ import yaml
 from tqdm import tqdm
 
 
+def mean_flat(tensor):
+    return torch.mean(tensor.view(tensor.size(0), -1), dim=1)
+
 def train_model(dataset, epochs=10, batch_size=32, lr=1e-4, lambda_vlb=0.001, num_diffusion_steps=1000, diffusion_model=None):
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     optimizer = optim.Adam(diffusion_model.parameters(), lr=lr)
@@ -23,42 +26,47 @@ def train_model(dataset, epochs=10, batch_size=32, lr=1e-4, lambda_vlb=0.001, nu
         epoch_loss = 0
         batch_count = 0
         
-        for original_molecule, protein_embedding, time_step, _ in tqdm(dataloader, desc=f'Epoch {epoch + 1}/{epochs}', leave=False):
+        for original_molecule, protein_embedding, _, _ in tqdm(dataloader, desc=f'Epoch {epoch + 1}/{epochs}', leave=False):
             original_molecule = original_molecule.to(device)
             protein_embedding = protein_embedding.to(device)
-            time_step = time_step.to(device)
+            batch_size = original_molecule.size(0)
             
             optimizer.zero_grad()
             
             noise = torch.randn_like(original_molecule)
-            noised_molecule = diffusion_model.noise_molecule(original_molecule, time_step, noise=noise)
+            vb = []
+            xstart_mse = []
+            mse = []
+
+            for t in reversed(range(num_diffusion_steps)):
+                t_batch = torch.tensor([t] * batch_size, device=device)
+                noised_molecule = diffusion_model.noise_molecule(original_molecule, t_batch, noise=noise)
+                
+                with torch.no_grad():
+                    out = diffusion_model._vb_terms_bpd(
+                        original_molecule=original_molecule,
+                        noised_molecule=noised_molecule,
+                        time_step=t_batch,
+                        protein_embedding=protein_embedding
+                    )
+                
+                vb.append(out["output"])
+                xstart_mse.append(mean_flat((out["pred_xstart"] - original_molecule) ** 2))
+                eps = diffusion_model._predict_eps_from_xstart(noised_molecule, t_batch, out["pred_xstart"])
+                mse.append(mean_flat((eps - noise) ** 2))
             
-            log_var, noise_pred = diffusion_model(noised_molecule, time_step, protein_embedding)
+            vb = torch.stack(vb, dim=1)
+            xstart_mse = torch.stack(xstart_mse, dim=1)
+            mse = torch.stack(mse, dim=1)
             
             # Compute L_simple
-            L_simple = torch.mean((noise_pred - noise) ** 2)
+            L_simple = mse.mean()
 
-            # Compute q_mean and L_vlb for each timestep
-            alpha_bar_t = diffusion_model.alpha_bar[time_step].unsqueeze(-1).unsqueeze(-1)  # Adjust dimensions for broadcasting
-            q_mean = (noised_molecule - torch.sqrt(1 - alpha_bar_t) * noise) / torch.sqrt(alpha_bar_t)
-            L_vlb_t = 0.5 * torch.sum(log_var + (noised_molecule - q_mean) ** 2 / torch.exp(log_var) - 1, dim=1).mean()
-
-            # Add contributions for each timestep to L_vlb
-            L_vlb = L_vlb_t
-
-            # Compute L_0
-            L_0 = -diffusion_model.log_prob(original_molecule, noise_pred)
-
-            # Compute L_T
-            prior_mean = torch.zeros_like(original_molecule)
-            prior_log_var = torch.zeros_like(original_molecule)
-            L_T = 0.5 * torch.sum(prior_log_var + (original_molecule - prior_mean) ** 2 / torch.exp(prior_log_var) - 1, dim=1).mean()
-
-            # Total VLB Loss
-            L_vlb_total = L_0 + L_vlb + L_T
+            # Compute L_vlb
+            L_vlb = vb.mean()
 
             # Compute L_hybrid
-            L_hybrid = L_simple + lambda_vlb * L_vlb_total
+            L_hybrid = L_simple + lambda_vlb * L_vlb
 
             L_hybrid.backward()
             optimizer.step()
@@ -95,5 +103,4 @@ diffusion_model = diffusion_model.to(device)
 # Train the model
 print("BEGIN TRAIN")
 trained_diffusion_model = train_model(dataset, epochs=epochs, batch_size=batch_size, lr=lr, lambda_vlb=lambda_vlb, num_diffusion_steps=num_diffusion_steps, diffusion_model=diffusion_model)
-exit()
 torch.save(unet_model.state_dict(), 'models/unet_model.pt')

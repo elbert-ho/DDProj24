@@ -17,9 +17,9 @@ def extract_random_proteins(input_file, output_file, num_proteins):
         SeqIO.write(random_sequences, output_handle, "fasta")
 
 # Example usage
-input_file = "../data/uniprot.fasta"  # Replace with your input file path
-output_file = "../data/uniprot1000.fasta"  # Replace with your desired output file path
-num_proteins = 1000
+input_file = "../data/test_prots1K.fasta"  # Replace with your input file path
+output_file = "../data/test_prots100.fasta"  # Replace with your desired output file path
+num_proteins = 100
 
 extract_random_proteins(input_file, output_file, num_proteins)
 print(f"Extracted {num_proteins} random protein sequences to {output_file}")
