@@ -97,7 +97,7 @@ trained_diffusion_model = UNet1D(input_channels=1, output_channels=1, time_embed
 pretrained_pic50_model.load_state_dict(torch.load('models/pIC50_model.pt', map_location=device))
 pretrained_qed_model.load_state_dict(torch.load('models/qed_model.pt', map_location=device))
 pretrained_sas_model.load_state_dict(torch.load('models/sas_model.pt', map_location=device))
-trained_diffusion_model.load_state_dict(torch.load('models/unet_model_no_var.pt', map_location=device))
+trained_diffusion_model.load_state_dict(torch.load('best_diffusion_model.pt', map_location=device))
 
 diffusion_model = DiffusionModel(unet_model=trained_diffusion_model, num_diffusion_steps=num_diffusion_steps, device=device).to(device)
 

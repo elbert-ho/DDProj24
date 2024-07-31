@@ -4,6 +4,7 @@ import torch
 from DiffusionModel import DiffusionModel
 from pIC50Loader import pIC50Dataset
 from pIC50Predictor import pIC50Predictor
+from DiffusionModelGLIDE import *
 from torch.utils.data import Dataset, DataLoader, random_split
 import torch.nn as nn
 
@@ -16,14 +17,16 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
         model.train()
         train_loss = 0.0
 
-        for noised_molecule, protein, time_step, pIC50 in train_dataloader:
-            noised_molecule = noised_molecule.to(device).squeeze(1)
-            protein = protein.to(device).squeeze(1)
-            time_step = time_step.to(device).squeeze(1)
+        for mol, protein, pIC50 in train_dataloader:
+            b = mol.shape[0]
+            mol = mol.to(device)
+            protein = protein.to(device)
+            time_step = torch.randint(0, 1000, [b,], device=device)
+            mol = diffusion_model.q_sample(mol, time_step)
             pIC50 = pIC50.to(device)
 
             optimizer.zero_grad()
-            outputs = model(noised_molecule, protein, time_step)
+            outputs = model(mol, protein, time_step)
             loss = criterion(outputs.squeeze(), pIC50)
             loss.backward()
             optimizer.step()
@@ -35,13 +38,14 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for noised_molecule, protein, time_step, pIC50 in val_dataloader:
-                noised_molecule = noised_molecule.to(device).squeeze(1)
-                protein = protein.to(device).squeeze(1)
-                time_step = time_step.to(device).squeeze(1)
+            for mol, protein, pIC50 in val_dataloader:
+                b = mol.shape[0]
+                mol = mol.to(device)
+                protein = protein.to(device)
+                time_step = torch.randint(0, 1000, [b,], device=device)
+                mol = diffusion_model.q_sample(mol, time_step)
                 pIC50 = pIC50.to(device)
-
-                outputs = model(noised_molecule, protein, time_step)
+                outputs = model(mol, protein, time_step)
                 loss = criterion(outputs.squeeze(), pIC50)
                 val_loss += loss.item()
 
@@ -68,9 +72,10 @@ with open("hyperparams.yaml", "r") as file:
     config = yaml.safe_load(file)
 
 num_diffusion_steps = config["diffusion_model"]["num_diffusion_steps"]
+diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(num_diffusion_steps))
 
 diffusion_model = DiffusionModel(unet_model=None, num_diffusion_steps=num_diffusion_steps)
-dataset = pIC50Dataset(protein_file, smiles_file, pIC50_file, diffusion_model, num_diffusion_steps=num_diffusion_steps)
+dataset = pIC50Dataset(protein_file, smiles_file, pIC50_file)
 
 # Train-test split
 train_size = int(0.8 * len(dataset))

@@ -3,7 +3,7 @@ import torch.optim as optim
 from torch.utils.data import random_split, DataLoader
 from MolPropLoader import MolPropDataset
 from MolPropModel import PropertyModel
-from DiffusionModel import DiffusionModel
+from DiffusionModelGLIDE import *
 import torch.nn as nn
 from tqdm import tqdm
 import yaml
@@ -15,10 +15,8 @@ with open("hyperparams.yaml", "r") as file:
 
 num_diffusion_steps = config["diffusion_model"]["num_diffusion_steps"]
 
-diffusion_model = DiffusionModel(unet_model=None, num_diffusion_steps=num_diffusion_steps)
-
-dataset = MolPropDataset(smiles_file='data/smiles_output.npy', qed_file='data/qed.npy', sas_file='data/sas.npy', diffusion_model=diffusion_model, num_diffusion_steps=num_diffusion_steps)
-
+diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(num_diffusion_steps))
+dataset = MolPropDataset(smiles_file='data/smiles_output.npy', qed_file='data/qed.npy', sas_file='data/sas.npy')
 # Split into train and validation sets
 train_size = int(0.8 * len(dataset))
 val_size = len(dataset) - train_size
@@ -37,6 +35,7 @@ d_model = config["mol_model"]["d_model"]
 max_seq_length = config["mol_model"]["max_seq_length"]
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 qed_model = PropertyModel(input_size, num_diffusion_steps, time_embed_dim).to(device)
 sas_model = PropertyModel(input_size, num_diffusion_steps, time_embed_dim).to(device)
@@ -61,17 +60,21 @@ while patience_counter < patience:
     train_qed_loss = 0.0
     train_sas_loss = 0.0
 
-    for inputs, time_step, qeds, sas in tqdm(train_loader, desc=f"Epoch {epoch} [Training]"):
+    for inputs, qeds, sas in tqdm(train_loader, desc=f"Epoch {epoch} [Training]"):
         # Move tensors to device
-        inputs, time_step, qeds, sas = inputs.to(device), time_step.to(device), qeds.to(device), sas.to(device)
+        inputs, qeds, sas = inputs.to(device), qeds.to(device), sas.to(device)
+        b = inputs.shape[0]
+        time_step = torch.randint(0, 1000, [b,], device=device)
+        
+        inputs = diffusion_model.q_sample(inputs, time_step)
 
         # Zero the parameter gradients
         qed_optimizer.zero_grad()
         sas_optimizer.zero_grad()
 
         # Forward pass
-        qed_outputs = qed_model(inputs, time_step)
-        sas_outputs = sas_model(inputs, time_step)
+        qed_outputs = qed_model(inputs, time_step).clamp(0, 1)
+        sas_outputs = sas_model(inputs, time_step).clamp(1, 10)
 
         # Calculate loss
         qed_loss = criterion(qed_outputs.squeeze(), qeds)
@@ -97,9 +100,12 @@ while patience_counter < patience:
     val_sas_loss = 0.0
 
     with torch.no_grad():
-        for inputs, time_step, qeds, sas in tqdm(val_loader, desc=f"Epoch {epoch} [Validation]"):
+        for inputs, qeds, sas in tqdm(val_loader, desc=f"Epoch {epoch} [Validation]"):
             # Move tensors to device
-            inputs, time_step, qeds, sas = inputs.to(device), time_step.to(device), qeds.to(device), sas.to(device)
+            inputs, qeds, sas = inputs.to(device), qeds.to(device), sas.to(device)
+            b = inputs.shape[0]
+            time_step = torch.randint(0, 1000, [b,], device=device)
+            inputs = diffusion_model.q_sample(inputs, time_step)
 
             qed_outputs = qed_model(inputs, time_step)
             sas_outputs = sas_model(inputs, time_step)

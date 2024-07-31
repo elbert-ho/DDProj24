@@ -4,38 +4,49 @@ import torch.nn.functional as F
 from SinPosEmb import getTimeMLP
 
 class pIC50Predictor(nn.Module):
-    def __init__(self, molecule_dim, protein_dim, hidden_dim, num_heads, embedding_dim, max_timesteps):
+    def __init__(self, molecule_dim, protein_dim, num_heads, embedding_dim, max_timesteps):
         super(pIC50Predictor, self).__init__()
-
         # Embedding layers
-        self.molecule_fc = nn.Linear(molecule_dim + embedding_dim, hidden_dim)
-        self.protein_fc = nn.Linear(protein_dim + embedding_dim, hidden_dim)
+        self.molecule_fc1 = nn.Linear(molecule_dim + embedding_dim, 4096)
+        self.mbn1 = nn.BatchNorm1d(1024)
+        self.molecule_fc2 = nn.Linear(4096, 2048)
+        self.mbn2 = nn.BatchNorm1d(2048)
+        self.molecule_fc3 = nn.Linear(2048, 1024) 
+        self.mbn3 = nn.BatchNorm1d(1024)
+        self.protein_fc = nn.Linear(protein_dim + embedding_dim, 1024)
+        self.pbn1 = nn.BatchNorm1d(1024)
         self.posEmb1 = getTimeMLP(embedding_dim / 4, max_timesteps, embedding_dim)
         self.posEmb2 = getTimeMLP(embedding_dim / 4, max_timesteps, embedding_dim)
-        self.positional_embedding = getTimeMLP(embedding_dim / 4, max_timesteps, embedding_dim)
+        self.posEmb3 = getTimeMLP(embedding_dim / 4, max_timesteps, embedding_dim)
 
         # Cross-attention layers
-        self.cross_attention = nn.MultiheadAttention(hidden_dim, num_heads)
+        self.cross_attention = nn.MultiheadAttention(1024, num_heads)
 
         # Fully connected layers
-        self.fc1 = nn.Linear(hidden_dim + embedding_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim // 2)
-        self.fc3 = nn.Linear(hidden_dim // 2, 1)
+        self.fc1 = nn.Linear(1024 + embedding_dim, 1024)
+        self.bn1 = nn.BatchNorm1d(1024)
+        self.fc2 = nn.Linear(1024, 512)
+        self.bn2 = nn.BatchNorm1d(512)
+        self.fc3 = nn.Linear(512, 256)
+        self.bn3 = nn.BatchNorm1d(256)
+        self.fc4 = nn.Linear(256, 1)
 
         # Dropout
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, molecule_repr, protein_repr, time_step):
         device = molecule_repr.device
         self.to(device)
-
         # Process molecule and protein representations
         time1 = self.posEmb1(time_step).to(device)
         time2 = self.posEmb2(time_step).to(device)
-        time3 = self.positional_embedding(time_step).squeeze(1).to(device)
+        time3 = self.posEmb3(time_step).squeeze(1).to(device)
 
         # Concatenate time embeddings instead of adding
         mol_hidden = torch.cat((molecule_repr, time1), dim=-1)
+        mol_hidden = self.dropout(F.relu())
+
+
         mol_hidden = F.relu(self.molecule_fc(mol_hidden))
 
         prot_hidden = torch.cat((protein_repr, time2), dim=-1)
@@ -60,11 +71,9 @@ class pIC50Predictor(nn.Module):
         # Concatenate attention output with time embedding
         combined_repr = torch.cat((attention_output, time3), dim=-1)
 
-        # Fully connected layers with dropout
-        hidden = F.relu(self.fc1(combined_repr))
-        hidden = self.dropout(hidden)
-        hidden = F.relu(self.fc2(hidden))
-        hidden = self.dropout(hidden)
+        # Fully connected layers with batch norm and dropout
+        hidden = self.dropout(F.relu(self.bn1(self.fc1(combined_repr))))
+        hidden = self.dropout(F.relu(self.bn2(self.fc2(hidden))))
         pIC50 = self.fc3(hidden)
 
         return pIC50

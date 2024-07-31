@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader, random_split
 from tokenizers import Tokenizer
 from DiffusionModel import DiffusionModel
 from pIC50Loader import pIC50Dataset
-from UNet2 import UNetModel
+from unet_condition import Text2ImUNet
 import yaml
 from tqdm import tqdm
 import numpy as np
@@ -100,7 +100,9 @@ unet_ted = config["UNet"]["time_embedding_dim"]
 device = config["mol_model"]["device"]
 
 # Initialize models
-unet_model = UNetModel(in_channels=1, model_channels=unet_ted, out_channels=1, num_res_blocks=2, attention_resolutions=[512], dropout=0.1, channel_mult=(32768, 4096, 512, 64), conv_resample=True, dims=1, num_classes=None, use_checkpoint=False).to(device)
+unet_model = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=1, model_channels=48, out_channels=2, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
+unet_model = unet_model.to("cuda")
+# unet_model = UNetModel(in_channels=1, model_channels=unet_ted, out_channels=1, num_res_blocks=2, attention_resolutions=[512], dropout=0.1, channel_mult=(32768, 4096, 512, 64), conv_resample=True, dims=1, num_classes=None, use_checkpoint=False).to(device)
 
 # Assuming original_molecule data is available in the dataset
 diffusion_model = DiffusionModel(unet_model=unet_model, num_diffusion_steps=num_diffusion_steps, device=device)
@@ -110,4 +112,4 @@ diffusion_model = diffusion_model.to(device)
 # Train the model
 print("BEGIN TRAIN")
 trained_diffusion_model = train_model(dataset, epochs=epochs, batch_size=batch_size, lr=lr, num_diffusion_steps=num_diffusion_steps, diffusion_model=diffusion_model)
-torch.save(unet_model.state_dict(), 'models/unet_model_no_var.pt')
+torch.save(unet_model.state_dict(), 'models/unet_model_no_var_glide.pt')
