@@ -9,19 +9,19 @@ class PropertyModel(nn.Module):
         self.positional_embedding = getTimeMLP(embedding_dim / 4, max_timesteps, embedding_dim)
         
         self.fc1 = nn.Linear(input_size + embedding_dim, 4096)
-        self.bn1 = nn.BatchNorm1d(4096)
+        self.bn1 = nn.LayerNorm(4096)
         self.dropout1 = nn.Dropout(0.1)
         
         self.fc2 = nn.Linear(4096, 1024)
-        self.bn2 = nn.BatchNorm1d(1024)
+        self.bn2 = nn.LayerNorm(1024)
         self.dropout2 = nn.Dropout(0.1)
         
         self.fc3 = nn.Linear(1024, 256)
-        self.bn3 = nn.BatchNorm1d(256)
+        self.bn3 = nn.LayerNorm(256)
         self.dropout3 = nn.Dropout(0.1)
         
         self.fc4 = nn.Linear(256, 128)
-        self.bn4 = nn.BatchNorm1d(128)
+        self.bn4 = nn.LayerNorm(128)
         self.dropout4 = nn.Dropout(0.1)
         
         self.output = nn.Linear(128, 1)

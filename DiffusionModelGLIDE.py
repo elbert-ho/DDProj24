@@ -126,7 +126,7 @@ class GaussianDiffusion:
         )
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
     
-    def p_mean_variance(self, model, x, t, clip_denoised=True, denoised_fn=None, model_kwargs=None):
+    def p_mean_variance(self, model, x, t, prot=None, clip_denoised=True, denoised_fn=None, model_kwargs=None):
         """
         Apply the model to get p(x_{t-1} | x_t), as well as a prediction of
         the initial x, x_0.
@@ -152,7 +152,7 @@ class GaussianDiffusion:
 
         B, C = x.shape[:2]
         assert t.shape == (B,)
-        model_output = model(x, t, **model_kwargs)
+        model_output = model(x, t, prot, **model_kwargs)
         if isinstance(model_output, tuple):
             model_output, extra = model_output
         else:
@@ -199,7 +199,7 @@ class GaussianDiffusion:
         ) / _extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
     
 
-    def condition_mean(self, cond_fn, p_mean_var, x, t, model_kwargs=None):
+    def condition_mean(self, cond_fn, p_mean_var, x, t, prot=None, model_kwargs=None):
         """
         Compute the mean for the previous step, given a function cond_fn that
         computes the gradient of a conditional log probability with respect to
@@ -208,15 +208,36 @@ class GaussianDiffusion:
 
         This uses the conditioning strategy from Sohl-Dickstein et al. (2015).
         """
-        gradient = cond_fn(x, t, **model_kwargs)
+        gradient = cond_fn(x, t, prot)
         new_mean = p_mean_var["mean"].float() + p_mean_var["variance"] * gradient.float()
         return new_mean
-    
+
+    def condition_score(self, cond_fn, p_mean_var, x, t, prot=None, model_kwargs=None):
+        """
+        Compute what the p_mean_variance output would have been, should the
+        model's score function be conditioned by cond_fn.
+
+        See condition_mean() for details on cond_fn.
+
+        Unlike condition_mean(), this instead uses the conditioning strategy
+        from Song et al (2020).
+        """
+        alpha_bar = _extract_into_tensor(self.alphas_cumprod, t, x.shape)
+
+        eps = self._predict_eps_from_xstart(x, t, p_mean_var["pred_xstart"])
+        eps = eps - (1 - alpha_bar).sqrt() * cond_fn(x, t, prot)
+
+        out = p_mean_var.copy()
+        out["pred_xstart"] = self._predict_xstart_from_eps(x, t, eps)
+        out["mean"], _, _ = self.q_posterior_mean_variance(x_start=out["pred_xstart"], x_t=x, t=t)
+        return out
+
     def p_sample(
         self,
         model,
         x,
         t,
+        prot=None,
         clip_denoised=True,
         denoised_fn=None,
         cond_fn=None,
@@ -243,6 +264,7 @@ class GaussianDiffusion:
             model,
             x,
             t,
+            prot=prot,
             clip_denoised=clip_denoised,
             denoised_fn=denoised_fn,
             model_kwargs=model_kwargs,
@@ -252,7 +274,7 @@ class GaussianDiffusion:
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
         )  # no noise when t == 0
         if cond_fn is not None:
-            out["mean"] = self.condition_mean(cond_fn, out, x, t, model_kwargs=model_kwargs)
+            out["mean"] = self.condition_mean(cond_fn, out, x, t, prot, model_kwargs=model_kwargs)
         sample = out["mean"] + nonzero_mask * torch.exp(0.5 * out["log_variance"]) * noise
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
@@ -260,13 +282,14 @@ class GaussianDiffusion:
         self,
         model,
         shape,
+        prot=None,
         noise=None,
         clip_denoised=True,
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
         device=None,
-        progress=False,
+        progress=True,
     ):
         """
         Generate samples from the model.
@@ -291,6 +314,7 @@ class GaussianDiffusion:
         for sample in self.p_sample_loop_progressive(
             model,
             shape,
+            prot=prot,
             noise=noise,
             clip_denoised=clip_denoised,
             denoised_fn=denoised_fn,
@@ -306,6 +330,7 @@ class GaussianDiffusion:
         self,
         model,
         shape,
+        prot=None,
         noise=None,
         clip_denoised=True,
         denoised_fn=None,
@@ -344,6 +369,7 @@ class GaussianDiffusion:
                     model,
                     img,
                     t,
+                    prot=prot,
                     clip_denoised=clip_denoised,
                     denoised_fn=denoised_fn,
                     cond_fn=cond_fn,
@@ -357,6 +383,7 @@ class GaussianDiffusion:
         model,
         x,
         t,
+        prot=None,
         clip_denoised=True,
         denoised_fn=None,
         cond_fn=None,
@@ -372,6 +399,7 @@ class GaussianDiffusion:
             model,
             x,
             t,
+            prot=prot,
             clip_denoised=clip_denoised,
             denoised_fn=denoised_fn,
             model_kwargs=model_kwargs,
@@ -406,13 +434,14 @@ class GaussianDiffusion:
         self,
         model,
         shape,
+        prot=None,
         noise=None,
         clip_denoised=True,
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
         device=None,
-        progress=False,
+        progress=True,
         eta=0.0,
     ):
         """
@@ -424,6 +453,7 @@ class GaussianDiffusion:
         for sample in self.ddim_sample_loop_progressive(
             model,
             shape,
+            prot=prot,
             noise=noise,
             clip_denoised=clip_denoised,
             denoised_fn=denoised_fn,
@@ -440,6 +470,7 @@ class GaussianDiffusion:
         self,
         model,
         shape,
+        prot=None,
         noise=None,
         clip_denoised=True,
         denoised_fn=None,
@@ -477,6 +508,7 @@ class GaussianDiffusion:
                     model,
                     img,
                     t,
+                    prot=prot,
                     clip_denoised=clip_denoised,
                     denoised_fn=denoised_fn,
                     cond_fn=cond_fn,
@@ -515,6 +547,7 @@ class GaussianDiffusion:
             x_start=x_start,
             x_t=x_t,
             t=t,
+            prot=prot,
             clip_denoised=False,
         )["output"]
         terms["vb"] *= self.num_timesteps / 1000.0
@@ -526,7 +559,7 @@ class GaussianDiffusion:
         return terms
     
     def _vb_terms_bpd(
-        self, model, x_start, x_t, t, clip_denoised=True, model_kwargs=None
+        self, model, x_start, x_t, t, prot=None, clip_denoised=True, model_kwargs=None
     ):
         """
         Get a term for the variational lower-bound.
@@ -542,7 +575,7 @@ class GaussianDiffusion:
             x_start=x_start, x_t=x_t, t=t
         )
         out = self.p_mean_variance(
-            model, x_t, t, clip_denoised=clip_denoised, model_kwargs=model_kwargs
+            model, x_t, t, prot=prot, clip_denoised=clip_denoised, model_kwargs=model_kwargs
         )
         kl = normal_kl(
             true_mean, true_log_variance_clipped, out["mean"], out["log_variance"]

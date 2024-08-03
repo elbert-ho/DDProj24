@@ -37,12 +37,14 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(n_diff_step))
 unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=1, model_channels=48, out_channels=2, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
+# unet.load_state_dict(torch.load('unet.pt', map_location=device))
 unet.to(device)
 
-dataset = ProtLigDataset('data/protein_embeddings.npy', 'data/smiles_output_normal.npy')
+dataset = ProtLigDataset('data/protein_embeddings.npy', 'data/smiles_output_selfies_normal.npy')
 train_size = int(0.8 * len(dataset))
 val_size = len(dataset) - train_size
-train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+generator1 = torch.Generator().manual_seed(42)
+train_dataset, val_dataset = random_split(dataset, [train_size, val_size], generator=generator1)
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)

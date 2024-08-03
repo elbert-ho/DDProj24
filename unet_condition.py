@@ -102,6 +102,7 @@ class Text2ImUNet(UNetModel):
         h = x.type(self.dtype)
 
         # print("EMB", emb.shape)
+
         # exit()
 
         # print(h.shape)

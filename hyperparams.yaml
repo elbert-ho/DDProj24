@@ -3,8 +3,8 @@ mol_model:
   num_heads: 8
   num_layers: 2
   d_ff: 2048
-  src_vocab_size: 1000
-  tgt_vocab_size: 1000
+  src_vocab_size: 79
+  tgt_vocab_size: 79
   max_seq_length: 128
   num_tasks: 5
   dropout: .1
@@ -26,7 +26,7 @@ diffusion_model:
   batch_size: 32
   lr: 1.0e-4
   num_diffusion_steps: 1000
-  patience: 5
+  patience: 100
   lambda_vlb: .001
   gradient_scale: 0.0001
 

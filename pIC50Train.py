@@ -1,7 +1,6 @@
 import yaml
 from tqdm import tqdm
 import torch
-from DiffusionModel import DiffusionModel
 from pIC50Loader import pIC50Dataset
 from pIC50Predictor import pIC50Predictor
 from DiffusionModelGLIDE import *
@@ -56,6 +55,7 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience_counter = 0
+            torch.save(model.state_dict(), 'models/pIC50_model.pt')
         else:
             patience_counter += 1
             if patience_counter >= patience:
@@ -73,8 +73,6 @@ with open("hyperparams.yaml", "r") as file:
 
 num_diffusion_steps = config["diffusion_model"]["num_diffusion_steps"]
 diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(num_diffusion_steps))
-
-diffusion_model = DiffusionModel(unet_model=None, num_diffusion_steps=num_diffusion_steps)
 dataset = pIC50Dataset(protein_file, smiles_file, pIC50_file)
 
 # Train-test split
@@ -99,7 +97,7 @@ time_embed_dim = config["pIC50_model"]["time_embed_dim"]
 
 # Instantiate model, criterion, and optimizer
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = pIC50Predictor(molecule_dim, protein_dim, hidden_dim, num_heads, time_embed_dim, num_diffusion_steps).to(device)
+model = pIC50Predictor(molecule_dim, protein_dim, num_heads, time_embed_dim, num_diffusion_steps).to(device)
 criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 

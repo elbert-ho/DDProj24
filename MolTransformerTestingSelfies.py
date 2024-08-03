@@ -1,0 +1,276 @@
+import torch
+from MolTransformerSelfies import MultiTaskTransformer
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.neural_network import MLPRegressor, MLPClassifier
+from sklearn.multioutput import MultiOutputClassifier, MultiOutputRegressor
+from sklearn.metrics import root_mean_squared_error, roc_auc_score, precision_recall_curve, auc
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+import yaml
+from rdkit import Chem, RDLogger
+from rdkit.Chem import AllChem
+from SelfiesTok import SelfiesTok
+import selfies as sf
+
+RDLogger.DisableLog('rdApp.*')
+
+with open("hyperparams.yaml", "r") as file:
+    config = yaml.safe_load(file)
+
+src_vocab_size = config["mol_model"]["src_vocab_size"]
+tgt_vocab_size = config["mol_model"]["tgt_vocab_size"]
+max_seq_length = config["mol_model"]["max_seq_length"]
+num_tasks = config["mol_model"]["num_tasks"]
+d_model = config["mol_model"]["d_model"]
+num_heads = config["mol_model"]["num_heads"]
+num_layers = config["mol_model"]["num_layers"]
+d_ff = config["mol_model"]["d_ff"]
+dropout = config["mol_model"]["dropout"]
+learning_rate = config["mol_model"]["learning_rate"]
+batch_size = config["mol_model"]["batch_size"]
+device = config["mol_model"]["device"]
+warmup_epochs = config["mol_model"]["warmup_epochs"]
+total_epochs = config["mol_model"]["total_epochs"]
+patience = config["mol_model"]["patience"]
+pretrain_epochs = config["mol_model"]["pretrain_epochs"]
+pretrain_learning_rate = config["mol_model"]["pretrain_learning_rate"]
+
+model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks)
+model.load_state_dict(torch.load('models/selfies_transformer.pt'))
+tokenizer = SelfiesTok.load("models/selfies_tok.json")
+
+# Ensure the model is on the correct device
+model.to(device)
+model.eval()
+
+def bit2np(bitvector):
+    bitstring = bitvector.ToBitString()
+    intmap = map(int, bitstring)
+    return np.array(list(intmap))
+
+def extract_morgan(smiles, targets):
+    X = []
+    y = pd.DataFrame()
+    for i, sm in enumerate(smiles):
+        mol = Chem.MolFromSmiles(sm)
+        if mol is None:
+            print("ERROR", sm)
+            continue
+        fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, 1024) # Morgan (Similar to ECFP4)
+        X.append(bit2np(fp))
+        y = pd.concat([y, targets.iloc[[i]]], ignore_index=True)
+    return np.array(X), y
+
+def train_ecfp(data_path, target_columns, is_classification=False, n_repeats=5, is_special=False):
+    data = pd.read_csv(data_path)
+    data = data.dropna()
+
+    # print(type(data[target_columns]))
+
+    x_smiles = data['smiles'].to_numpy()
+    X, y = extract_morgan(x_smiles, data[target_columns])
+    # y = data[target_columns]
+
+    # Initialize model
+    keys = data.keys()[1:]
+    if not is_special:
+        if is_classification:
+            model = MLPClassifier(max_iter=1000)
+            metric = roc_auc_score
+            metric_name = 'ROC-AUC'
+        else:
+            model = MLPRegressor(max_iter=1000)
+            metric = root_mean_squared_error
+            metric_name = 'RMSE'
+    else:
+        model = MLPClassifier(max_iter=1000)
+        metric_name = 'PR-AUC'
+    
+    # Prepare for plotting
+    train_sizes = [.0125, .025, .05, .1, .2, .4, .8]
+    metrics = []
+    metrics_std = []
+
+    # Evaluate model performance for different train sizes
+    for _, train_size in enumerate(tqdm(train_sizes, desc="Training Models")):
+        overall = []
+        for _ in range(n_repeats):
+            total = np.empty(len(keys))
+            for i in range(len(keys)):
+                key = keys[i]
+                y_cur = y[key].to_numpy()
+                if(len(y_cur) * train_size <= 1):
+                    continue
+                
+                if is_classification:
+                    X_train, X_test, y_train, y_test = train_test_split(X, y_cur, train_size=train_size, random_state=0, stratify=y_cur)
+
+                else:
+                    X_train, X_test, y_train, y_test = train_test_split(X, y_cur, train_size=train_size, random_state=0)
+
+                model.fit(X_train, y_train)
+                if is_classification:
+                    y_pred = model.predict_proba(X_test)
+                else:
+                    y_pred = model.predict(X_test)
+                
+                if not is_special:
+                    if is_classification:
+                        total[i] = metric(y_test, y_pred[:,1])
+                    else:
+                        total[i] = metric(y_test, y_pred)
+                else:
+                    # Calculate precision and recall values
+                    precision, recall, _ = precision_recall_curve(y_test, y_pred[:,1])
+                    # Calculate the area under the curve
+                    total[i] = auc(recall, precision)
+                         
+
+            overall.append(np.mean(total))
+        metrics.append(np.mean(overall))
+        metrics_std.append(np.std(overall))
+
+    plt.errorbar(train_sizes, metrics, metrics_std, linestyle='dashed', color='orange', label='ECFP')
+    # plt.plot(train_sizes, metrics, label='ecfp', color="red")
+
+
+
+# Function to train and plot for a single dataset
+def train_and_plot(data_path, target_columns, model, is_classification=False, n_repeats=5, title="Plot", is_special=False):
+    # Load dataset
+    data = pd.read_csv(data_path)
+    
+    # Drop rows with missing values
+    data = data.dropna()
+    
+    # Extract features and target
+    x_smiles = data.loc[:,'smiles'].to_numpy().copy()
+    y = data[target_columns]
+    idx = 0
+    while idx < (len(x_smiles)):
+        # print(x_smiles)
+        try:
+            selfies_toks = sf.split_selfies(sf.encoder(x_smiles[idx]))
+            selfies_toks = tokenizer.encode(["[CLS]"] + list(selfies_toks) + ["[EOS]"])
+            ids = selfies_toks + [tokenizer.token_to_id["[PAD]"]] * (max_seq_length - len(selfies_toks))
+            ids = ids[:max_seq_length] 
+            x_smiles[idx] = ids
+            idx += 1
+        except Exception as e:
+            print("Skipped " + x_smiles[idx])
+            x_smiles = np.delete(x_smiles, idx)
+            y = y.drop(idx, axis=0)
+            y = y.reset_index(drop=True)
+
+
+    for i in tqdm(range(len(x_smiles))):
+        tensor_smiles = torch.tensor(x_smiles[i]).unsqueeze(0).to('cuda')
+        x_smiles[i] = model.encode_smiles(tensor_smiles)[1].cpu().detach().numpy()
+    X = np.stack((x_smiles)).reshape(-1, 768)
+
+    keys = data.keys()[1:]
+    if not is_special:
+        if is_classification:
+            model = MLPClassifier(max_iter=1000)
+            metric = roc_auc_score
+            metric_name = 'ROC-AUC'
+        else:
+            model = MLPRegressor(max_iter=1000)
+            metric = root_mean_squared_error
+            metric_name = 'RMSE'
+    else:
+        model = MLPClassifier(max_iter=1000)
+        metric_name = 'PR-AUC'
+    
+    # Prepare for plotting
+    train_sizes = [.0125, .025, .05, .1, .2, .4, .8]
+    metrics = []
+    metrics_std = []
+
+    # Evaluate model performance for different train sizes
+    for _, train_size in enumerate(tqdm(train_sizes, desc="Training Models")):
+        overall = []
+        for _ in range(n_repeats):
+            total = np.empty(len(keys))
+            for i in range(len(keys)):
+                key = keys[i]
+                y_cur = y[key].to_numpy()
+                if(len(y_cur) * train_size <= 1):
+                    continue
+
+                if is_classification:
+                    X_train, X_test, y_train, y_test = train_test_split(X, y_cur, train_size=train_size, random_state=0, stratify=y_cur)
+                else:
+                    X_train, X_test, y_train, y_test = train_test_split(X, y_cur, train_size=train_size, random_state=0)
+
+                model.fit(X_train, y_train)
+                if is_classification:
+                    y_pred = model.predict_proba(X_test)
+                else:
+                    y_pred = model.predict(X_test)
+
+                if not is_special:
+                    if is_classification:
+                        total[i] = metric(y_test, y_pred[:,1])
+                    else:
+                        total[i] = metric(y_test, y_pred)
+                else:
+                    # Calculate precision and recall values
+                    precision, recall, _ = precision_recall_curve(y_test, y_pred[:,1])
+                    # Calculate the area under the curve
+                    total[i] = auc(recall, precision)
+                         
+
+            overall.append(np.mean(total))
+        metrics.append(np.mean(overall))
+        metrics_std.append(np.std(overall))
+
+    plt.errorbar(train_sizes, metrics, metrics_std, linestyle='dashdot', color='purple', label='Transformer')
+    
+    # Plotting
+    plt.xlabel('Train size')
+    plt.ylabel(metric_name)
+    # Set x-axis to log scale
+    plt.xscale('log')
+
+    # Manually set the ticks for the x-axis
+    plt.xticks([0.025, 0.05, 0.1, 0.2, 0.4, 0.8], ['0.025', '0.05', '0.1', '0.2', '0.4', '0.8'])
+    plt.title(f'{title}')
+    # plt.plot(train_sizes, metrics, label=f'Transformer', color="blue")
+
+# Example usage for each dataset
+# Train and plot for each relevant CSV file
+
+datasets_info = [
+    ('mol_net_datasets/clintox_relevant.csv', ['FDA_APPROVED', 'CT_TOX'], 'ClinTox', True, False),
+    ('mol_net_datasets/sider_relevant.csv', ['Hepatobiliary disorders', 'Metabolism and nutrition disorders', 'Product issues', 
+                                     'Eye disorders', 'Investigations', 'Musculoskeletal and connective tissue disorders', 
+                                     'Gastrointestinal disorders', 'Social circumstances', 'Immune system disorders', 
+                                     'Reproductive system and breast disorders'], 'SIDER', True, False),
+    ('mol_net_datasets/tox21_relevant.csv', ['NR-AR', 'NR-AR-LBD', 'NR-AhR', 'NR-Aromatase', 'NR-ER', 'NR-ER-LBD', 
+                                     'NR-PPAR-gamma', 'SR-ARE', 'SR-ATAD5', 'SR-HSE', 'SR-MMP', 'SR-p53'], 'Tox21', True, False),
+    ('mol_net_datasets/bbbp_relevant.csv', ['p_np'], 'BBBP', True, False),
+    ('mol_net_datasets/bace_relevant.csv', ['Class'], 'BACE', True, False),
+    ('mol_net_datasets/hiv_relevant.csv', ['HIV_active'], 'HIV', True, False),
+    ('mol_net_datasets/lipophilicity_relevant.csv', ['exp'], 'Lipophilicity', False, False),
+    ('mol_net_datasets/free_solv_relevant.csv', ['expt'], 'FreeSolv', False, False),
+    ('mol_net_datasets/esol_relevant.csv', ['ESOL predicted log solubility in mols per litre'], 'ESOL', False, False)
+]
+
+# datasets_info = [
+#     ('mol_net_datasets/muv_relevant.csv', ['MUV-466','MUV-548','MUV-600','MUV-644','MUV-652','MUV-689','MUV-692','MUV-712'], 'MUV', True, True),
+# ]
+
+# Create subplots
+
+# Loop through each dataset info and create a plot
+for i, (data_path, target_columns, title, is_classification, is_special) in enumerate(datasets_info):
+    plt.figure(figsize=([10,8]))
+    train_and_plot(data_path, target_columns, model, is_classification, 5, title, is_special)
+    train_ecfp(data_path, target_columns, is_classification, n_repeats=5, is_special=is_special)
+    print("FINISHED")
+    plt.legend(loc="upper right")
+    plt.savefig(f"mol_net_datasets/images/{title}.png")
+    plt.clf()

@@ -249,12 +249,14 @@ class AttentionBlock(nn.Module):
         self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
 
     def forward(self, x, encoder_out=None):
-        # print("le shape", x.shape, self.channels)
+        # print("le shape", x.shape, self.channels, encoder_out.shape)
         b, c, *spatial = x.shape
         qkv = self.qkv(self.norm(x).view(b, c, -1))
         encoder_out = encoder_out.unsqueeze(2)
+        # print(encoder_out.shape)
         if encoder_out is not None:
             encoder_out = self.encoder_kv(encoder_out)
+            # print(encoder_out.shape)
             h = self.attention(qkv, encoder_out)
         else:
             h = self.attention(qkv)
