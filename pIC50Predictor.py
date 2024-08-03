@@ -8,13 +8,13 @@ class pIC50Predictor(nn.Module):
         super(pIC50Predictor, self).__init__()
         # Embedding layers
         self.molecule_fc1 = nn.Linear(molecule_dim + embedding_dim, 4096)
-        self.mbn1 = nn.BatchNorm1d(4096)
+        self.mbn1 = nn.LayerNorm(4096)
         self.molecule_fc2 = nn.Linear(4096, 2048)
-        self.mbn2 = nn.BatchNorm1d(2048)
+        self.mbn2 = nn.LayerNorm(2048)
         self.molecule_fc3 = nn.Linear(2048, 1024) 
-        self.mbn3 = nn.BatchNorm1d(1024)
+        self.mbn3 = nn.LayerNorm(1024)
         self.protein_fc = nn.Linear(protein_dim + embedding_dim, 1024)
-        self.pbn1 = nn.BatchNorm1d(1024)
+        self.pbn1 = nn.LayerNorm(1024)
         self.posEmb1 = getTimeMLP(embedding_dim / 4, max_timesteps, embedding_dim)
         self.posEmb2 = getTimeMLP(embedding_dim / 4, max_timesteps, embedding_dim)
         self.posEmb3 = getTimeMLP(embedding_dim / 4, max_timesteps, embedding_dim)
@@ -26,11 +26,11 @@ class pIC50Predictor(nn.Module):
 
         # Fully connected layers
         self.fc1 = nn.Linear(1024 + embedding_dim, 1024)
-        self.bn1 = nn.BatchNorm1d(1024)
+        self.bn1 = nn.LayerNorm(1024)
         self.fc2 = nn.Linear(1024, 512)
-        self.bn2 = nn.BatchNorm1d(512)
+        self.bn2 = nn.LayerNorm(512)
         self.fc3 = nn.Linear(512, 256)
-        self.bn3 = nn.BatchNorm1d(256)
+        self.bn3 = nn.LayerNorm(256)
         self.fc4 = nn.Linear(256, 1)
 
         # Dropout

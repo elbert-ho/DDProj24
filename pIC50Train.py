@@ -65,7 +65,7 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
 # Load your dataset
 # Ensure you have defined the DiffusionModel and pIC50Dataset classes
 protein_file = 'data/protein_embeddings.npy'
-smiles_file = 'data/smiles_output.npy'
+smiles_file = 'data/smiles_output_selfies_normal.npy'
 pIC50_file = 'data/pIC50.npy'
 
 with open("hyperparams.yaml", "r") as file:

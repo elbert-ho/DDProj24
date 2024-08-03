@@ -33,15 +33,8 @@ def evaluate_model(model, val_loader, tokenizer, max_length, device):
             # Encode the input SMILES to get the representation for each token
             token_representations, fingerprints = model.encode_smiles(src)
 
-            # print(src[0])
-            # exit()
-
             # Decode each token representation to get the predicted SMILES
             decoded_sequences, task_outputs = model.decode_representation(token_representations, fingerprints, max_length, tokenizer)
-            print(src[0])
-            print(decoded_sequences[0])
-            print(token_representations[0][0])
-            exit()
 
             src = src.cpu().numpy()
             decoded_sequences = decoded_sequences.cpu().numpy()
@@ -57,9 +50,6 @@ def evaluate_model(model, val_loader, tokenizer, max_length, device):
                 # Convert token ids back to SMILES strings
                 original_smiles = tokenizer.decode(original_seq.tolist(), skip_special_tokens=True)
                 predicted_smiles = tokenizer.decode(predicted_seq.tolist(), skip_special_tokens=True)
-
-                print(original_smiles)
-                print(predicted_smiles)
 
                 original_sequences.append(original_smiles)
                 predicted_sequences.append(predicted_smiles)
@@ -136,7 +126,7 @@ pretrain_learning_rate = config["mol_model"]["pretrain_learning_rate"]
 tok_file = config["mol_model"]["tokenizer_file"]
 
 model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks)
-model.load_state_dict(torch.load('models/selfies_transformer2.pt'))
+model.load_state_dict(torch.load('models/selfies_transformer_final.pt'))
 
 # Ensure the model is on the correct device
 model.to(device)

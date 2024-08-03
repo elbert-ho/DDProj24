@@ -55,7 +55,7 @@ pretrain_learning_rate = config["mol_model"]["pretrain_learning_rate"]
 tok_file = config["mol_model"]["tokenizer_file"]
 
 smiles_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks)
-smiles_model.load_state_dict(torch.load('models/selfies_transformer.pt'))
+smiles_model.load_state_dict(torch.load('models/selfies_transformer_final.pt'))
 # Ensure the model is on the correct device
 smiles_model.to(device)
 tokenizer = SelfiesTok.load("models/selfies_tok.json")
@@ -179,5 +179,5 @@ if not smiles_only:
     np.save('data/sas.npy', sas_array)
 
 for i in range(num_batches):
-    os.remove(f'data/smiles_output_batch_{batch_index}.npy')
-    os.remove(f'data/smiles_fingerprint_batch_{batch_index}.npy')
+    os.remove(f'data/smiles_output_batch_{i}.npy')
+    os.remove(f'data/smiles_fingerprint_batch_{i}.npy')
