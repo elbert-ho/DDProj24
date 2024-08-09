@@ -62,7 +62,7 @@ d_ff = config["mol_model"]["d_ff"]
 dropout = config["mol_model"]["dropout"]
 tok_file = config["mol_model"]["tokenizer_file"]
 mol_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks).to(device)
-mol_model.load_state_dict(torch.load('models/selfies_transformer.pt', map_location=device))
+mol_model.load_state_dict(torch.load('models/selfies_transformer_final.pt', map_location=device))
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -79,14 +79,15 @@ num_epochs = config["pIC50_model"]["num_epochs"]
 time_embed_dim = config["pIC50_model"]["time_embed_dim"]
 pic50_model = pIC50Predictor(molecule_dim, protein_dim, num_heads, time_embed_dim, n_diff_step).to(device)
 
-pic50_model.load_state_dict(torch.load('models/pIC50_model.pt', map_location=device))
-qed_model.load_state_dict(torch.load('models/qed_model.pt', map_location=device))
-sas_model.load_state_dict(torch.load('models/sas_model.pt', map_location=device))
+# pic50_model.load_state_dict(torch.load('models/pIC50_model.pt', map_location=device))
+# qed_model.load_state_dict(torch.load('models/qed_model.pt', map_location=device))
+# sas_model.load_state_dict(torch.load('models/sas_model.pt', map_location=device))
 
 diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(n_diff_step))
-unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=1, model_channels=48, out_channels=2, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
+unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
 unet.to(device)
-unet.load_state_dict(torch.load('unet.pt', map_location=device))
+unet.load_state_dict(torch.load('unet_resized.pt', map_location=device))
+unet.eval()
 
 if False:
     protein_sequence = "SGFRKMAFPSGKVEGCMVQVTCGTTTLNGLWLDDVVYCPRHVICTSEDMLNPNYEDLLIRKSNHNFLVQAGNVQLRVIGHSMQNCVLKLKVDTANPKTPKYKFVRIQPGQTFSVLACYNGSPSGVYQCAMRPNFTIKGSFLNGSCGSVGFNIDYDCVSFCYMHHMELPTGVHAGTDLEGNFYGPFVDRQTAQAAGTDTTITVNVLAWLYAAVINGDRWFLNRFTTTLNDFNLVAMKYNYEPLTQDHVDILGPLSAQTGIAVLDMCASLKELLQNGMNGRTILGSALLEDEFTPFDVVRQCSGVTFQ"
@@ -108,12 +109,12 @@ if False:
 else:
     protein_embedding = torch.tensor(np.load("data/3cl.npy"), device=device)
 
-print(protein_embedding.shape)
+# print(protein_embedding.shape)
 
 # cond_fn = get_balanced_grad()
 
 # sample = diffusion_model.p_sample_loop(unet, (1, 1, input_size), prot=protein_embedding, cond_fn=get_balanced_grad)
-sample = diffusion_model.p_sample_loop(unet, (1, 1, input_size), prot=protein_embedding).reshape(input_size)
+sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_embedding).reshape(input_size)
 
 # sample = diffusion_model.ddim_sample_loop(unet, (1, 1, input_size), prot=protein_embedding)
 
@@ -142,6 +143,52 @@ try:
     img.save(img_path)
 except:
     pass
+
+
+import imageio
+import os
+
+sample_generator = diffusion_model.p_sample_loop_progressive(unet, (1, 1, input_size), prot=protein_embedding)
+
+idx = 0
+for sample_dict in sample_generator:
+    sample = sample_dict["sample"]
+    mins = np.load("data/smiles_mins_selfies.npy")
+    maxes = np.load("data/smiles_maxes_selfies.npy")
+    sample_rescale = torch.tensor(((sample.cpu().detach().numpy() + 1) / 2) * (maxes - mins) + mins, device=device)
+    # print(sample_rescale.shape)
+    # print(maxes.shape)
+    # print(mins.shape)
+
+    tokenizer = SelfiesTok.load("models/selfies_tok.json")
+
+    with torch.no_grad():
+        decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
+
+
+    predicted_selfies = tokenizer.decode(decoded_smiles.detach().cpu().flatten().tolist(), skip_special_tokens=True)
+    predicted_smiles = sf.decoder(predicted_selfies)
+
+    mol = Chem.MolFromSmiles(predicted_smiles)
+    img = Draw.MolToImage(mol)
+    img_path = f'imgs/gif/mol{idx+1:04}.png' 
+    img.save(img_path)
+    idx += 1
+
+
+
+png_dir = 'imgs/gif'
+images = []
+for file_name in sorted(os.listdir(png_dir)):
+    if file_name.endswith('.png'):
+        file_path = os.path.join(png_dir, file_name)
+        images.append(imageio.imread(file_path))
+
+# Make it pause at the end so that the viewers can ponder
+for _ in range(10):
+    images.append(imageio.imread(file_path))
+
+imageio.mimsave('animation.gif', images)
 
 
 # final_x = sample_rescale.detach().to(device).squeeze(0)

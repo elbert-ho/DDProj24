@@ -52,11 +52,11 @@ d_ff = config["mol_model"]["d_ff"]
 dropout = config["mol_model"]["dropout"]
 
 diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(n_diff_step))
-unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=1, model_channels=48, out_channels=2, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
+unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
 mol_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks).to(device)
 
-unet.load_state_dict(torch.load('unet.pt', map_location=device))
-mol_model.load_state_dict(torch.load('models/selfies_transformer.pt', map_location=device))
+unet.load_state_dict(torch.load('unet_resized.pt', map_location=device))
+mol_model.load_state_dict(torch.load('models/selfies_transformer_final.pt', map_location=device))
 
 unet, mol_model = unet.to(device), mol_model.to(device)
 
@@ -68,14 +68,14 @@ protein_groups = ref_data_smiles.groupby('Protein Sequence').filter(lambda x: le
 # Get unique protein sequences that have at least 25 SMILES strings
 unique_proteins = protein_groups['Protein Sequence'].unique()
 
-# Select 40 random unique proteins
-random_proteins = random.sample(list(unique_proteins), 40)
+# Select 40 random unique proteins HERE
+random_proteins = random.sample(list(unique_proteins), 10)
 
 # For each selected protein, extract 25 random SMILES strings
 selected_rows = []
 for protein in random_proteins:
     protein_df = protein_groups[protein_groups['Protein Sequence'] == protein]
-    selected_smiles = protein_df.sample(25)
+    selected_smiles = protein_df.sample(15)
     selected_rows.append(selected_smiles)
 
 ref_data_smiles_cut = pd.concat(selected_rows)
@@ -84,24 +84,30 @@ ref_data_smiles_cut = pd.concat(selected_rows)
 protein_indices = ref_data_smiles_cut.loc[:,"index"].to_numpy()
 protein_fingers_full = np.load("data/protein_embeddings.npy")
 protein_fingers_cut = []
+count = 0
 for protein_idx in protein_indices:
-    protein_fingers_cut.append(protein_fingers_full[protein_idx])
+    if count % 15 == 0:
+        protein_fingers_cut.append(protein_fingers_full[protein_idx])
+    count += 1
+
+# print(len(protein_fingers_cut))
 
 # Step 0.3.1: Generate 25 molecules per protein
-samples = torch.tensor([])
+samples = torch.tensor([], device=device)
 for protein_finger in protein_fingers_cut:
     protein_finger = torch.tensor(protein_finger, device=device)
-    protein_finger = protein_finger.repeat(25, 1)
-    sample = diffusion_model.p_sample_loop(unet, (25, 1, d_model * max_seq_length), prot=protein_finger).detach()
+    protein_finger = protein_finger.repeat(10, 1)
+    sample = diffusion_model.p_sample_loop(unet, (10, 256, 128), prot=protein_finger).detach()
     samples = torch.cat([samples, sample])
 
 # Debug line
 print(samples.shape)
 
 # Step 0.3.2: Remember to unnormalize
-mins = torch.tensor(np.load("data/smiles_mins_selfies.npy")).reshape(1, 1, -1)
-maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy")).reshape(1, 1, -1)
-sample_rescale = (((sample + 1) / 2) * (maxes - mins) + mins)
+mins = torch.tensor(np.load("data/smiles_mins_selfies.npy"), device=device).reshape(1, 1, -1)
+maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy"), device=device).reshape(1, 1, -1)
+sample_rescale = (((samples + 1) / 2) * (maxes - mins) + mins)
+print(sample_rescale.shape)
 
 # Step 0.3.3: Convert from SELFIES back to SMILES
 tokenizer = SelfiesTok.load("models/selfies_tok.json")
@@ -117,18 +123,24 @@ for decode in decoded_smiles:
 
 # Step 0.4: Isolate those 20 proteins and their original 50 molecules as well
 smiles_fingers_cut = []
-smiles_fingers_full = np.load("smiles_output_selfies.npy")
+smiles_fingers_full = np.load("data/smiles_output_selfies.npy")
 for protein_idx in protein_indices:
     smiles_fingers_cut.append(smiles_fingers_full[protein_idx].tolist())
 
 # Step 0.5: Plot in U-Map with 2 colors
-gen_fingers = sample_rescale.cpu().tolist()
+gen_fingers = sample_rescale.squeeze(1).cpu().tolist()
+# print(gen_fingers[0])
+# print(smiles_fingers_cut[0])
+# print(len(gen_fingers))
+# print(len(smiles_fingers_cut))
 combined_data = gen_fingers + smiles_fingers_cut
+
 # Create labels for coloring
 labels = [0] * len(gen_fingers) + [1] * len(smiles_fingers_cut)
 
 # Convert to numpy array
 combined_data_np = np.array(combined_data)
+print("Data shape:", combined_data_np.shape)
 
 # Fit UMAP
 reducer = umap.UMAP()
@@ -144,6 +156,18 @@ plt.xlabel('UMAP 1')
 plt.ylabel('UMAP 2')
 plt.savefig("umap.png")
 
+from sklearn.manifold import TSNE
+tsne = TSNE(n_components=2, perplexity=9)
+tsne_embedding = tsne.fit_transform(combined_data_np)
+plt.figure(figsize=(10, 7))
+plt.scatter(tsne_embedding[labels == 0, 0], tsne_embedding[labels == 0, 1], c='blue', label='Generated')
+plt.scatter(tsne_embedding[labels == 1, 0], tsne_embedding[labels == 1, 1], c='red', label='Original')
+plt.legend()
+plt.title('t-SNE Projection')
+plt.xlabel('t-SNE 1')
+plt.ylabel('t-SNE 2')
+plt.savefig("tsne.png")
+
 # Step 1: GuacMol
 # Step 1.1: Compute validity, uniqueness, novelty, FCD, KL-divergence
 # Step 1.1.1: Validity
@@ -153,9 +177,11 @@ total = 0
 for gen_smile in gen_smiles:
     try:
         mol = Chem.MolFromSmiles(gen_smile)
+        valid += 1
     except:
         pass
     gen_mols.append(mol)
+    total += 1
 
 print(f"Validity: {valid} / {total}")
 
@@ -183,6 +209,13 @@ for smiles in ref_data_smiles_cut.loc[:,"SMILES String"]:
 
 novel_smiles = unique_smiles_set.difference(ref_smiles)
 print(f"Novelty: {len(novel_smiles)} / {total}")
+
+# Step 1.1.5: FCD
+fcd = FCD(device='cuda:0', n_jobs=1)
+fcd_score = fcd(gen_smiles, ref_smiles)
+print(f"FCD: {fcd_score}")
+
+exit()
 
 # Step 1.1.4: KL-divergence
 pc_descriptor_subset = [
@@ -224,11 +257,6 @@ kldivs['internal_similarity'] = kldiv_int_int
 partial_scores = [np.exp(-score) for score in kldivs.values()]
 kl_score = sum(partial_scores) / len(partial_scores)
 print(f"KL Divergence: {kl_score}")
-
-# Step 1.1.5: FCD
-fcd = FCD(device='cuda:0', n_jobs=8)
-fcd_score = fcd(gen_smiles, ref_smiles)
-print(f"FCD: {fcd_score}")
 
 # Step 2: MOSES
 # Step 2.1: Compute SNN, IntDiv_1, IntDiv_2
@@ -337,40 +365,42 @@ print(f"Scaff Score: {scaff_score}")
 
 # Step 3: Experiments with real proteins
 # Step 3.1: Load in real protein (3cl protease)
-# cl3 = torch.tensor(np.load("data/3cl.npy"))
+cl3 = torch.tensor(np.load("data/3cl.npy"), device=device).repeat(100, 1)
 
 # # Step 3.2: Run model on this protein and generate 100 compounds
 
-# sample_cl3 = diffusion_model.p_sample_loop(unet, (100, 1, d_model * max_seq_length), prot=cl3).detach()
-# sample_cl3_rescale = (((sample + 1) / 2) * (maxes - mins) + mins)
+sample_cl3 = diffusion_model.p_sample_loop(unet, (100, 256, 128), prot=cl3).detach()
+sample_cl3_rescale = (((sample + 1) / 2) * (maxes - mins) + mins)
 
-# with torch.no_grad():
-#     decoded_smiles_cl3, _ = mol_model.decode_representation(sample_cl3_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
+with torch.no_grad():
+    decoded_smiles_cl3, _ = mol_model.decode_representation(sample_cl3_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
 
-# gen_smiles_cl3 = []
-# gen_mols_cl3 = []
+gen_smiles_cl3 = []
+gen_mols_cl3 = []
 
-# for decode in decoded_smiles_cl3:
-#     predicted_selfie = tokenizer.decode(decode.detach().cpu().flatten().tolist(), skip_special_tokens=True)
-#     predicted_smile = sf.decoder(predicted_selfie)
-#     gen_smiles_cl3.append(predicted_smile)
-#     gen_mols_cl3.append(Chem.MolFromSmiles(predicted_smile))
+for decode in decoded_smiles_cl3:
+    predicted_selfie = tokenizer.decode(decode.detach().cpu().flatten().tolist(), skip_special_tokens=True)
+    predicted_smile = sf.decoder(predicted_selfie)
+    gen_smiles_cl3.append(predicted_smile)
+    gen_mols_cl3.append(Chem.MolFromSmiles(predicted_smile))
 
-# # Step 3.2.1: Draw pictures of the compounds
-# count = 0
-# for gen_mol_cl3 in gen_mols_cl3:
-#     img = Draw.MolToImage(gen_mol_cl3)
-#     img_path = f'imgs/cl3/cl3_ligand_{count}' 
-#     img.save(img_path)
-#     count += 1
+# Step 3.2.1: Draw pictures of the compounds
+count = 0
+for gen_mol_cl3 in gen_mols_cl3:
+    img = Draw.MolToImage(gen_mol_cl3)
+    img_path = f'imgs/cl3/cl3_ligand_{count}' 
+    img.save(img_path)
+    count += 1
 
 # # Step 3.3: Check uniqueness, novelty, SA, QED
-# unique_smiles_cl3_set = set(gen_smiles_cl3)
-# unique_smiles_cl3_list = list(unique_smiles_cl3_set)
+unique_smiles_cl3_set = set(gen_smiles_cl3)
+unique_smiles_cl3_list = list(unique_smiles_cl3_set)
+print(f"Uniqueness: {len(unique_smiles_cl3_list)} / {len(gen_smiles_cl3)}")
 
-# print(f"Uniqueness: {len(unique_smiles_cl3_list)} / {len(gen_smiles_cl3)}")
-
-
+props_cl3 = compute_properties(gen_mols_cl3)
+plt.hist(props_cl3["QED"])
+plt.savefig("imgs/cl3/qed.png")
+plt.hist(props_cl3["SA"])
+plt.savefig("imgs/cl3/sa.png")
 
 # Step 3.4: Run a docking simulation and check binding energies
-

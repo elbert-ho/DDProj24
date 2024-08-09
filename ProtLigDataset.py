@@ -12,6 +12,6 @@ class ProtLigDataset(Dataset):
 
     def __getitem__(self, idx):
         protein_cls = torch.tensor(self.protein_data[idx], dtype=torch.float32)
-        smiles = torch.tensor(self.smiles_data[idx], dtype=torch.float32)
-        
+        smiles = torch.tensor(self.smiles_data[idx], dtype=torch.float32).reshape(256, 128)
+        # print(smiles.shape)
         return smiles, protein_cls

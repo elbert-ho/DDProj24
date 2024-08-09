@@ -91,30 +91,45 @@ class Text2ImUNet(UNetModel):
 
     def forward(self, x, timesteps, xf_proj):
         hs = []
+        # print(x.shape)
+        # exit()
         # xf_proj = self.down_proj_prot(xf_proj)
         # print(xf_proj.shape)        
-        xf_proj = xf_proj.squeeze(1)
+        # xf_proj = xf_proj.squeeze(1)
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+        # print(emb.shape)
+        # print(xf_proj.shape)
+        xf_proj = xf_proj.squeeze(1)
         if self.xf_width:
             emb = emb + xf_proj.to(emb)
         else:
             xf_out = None
         h = x.type(self.dtype)
-
+        # print(emb.shape)
+        # exit()
         # print("EMB", emb.shape)
 
         # exit()
 
         # print(h.shape)
+        # print(xf_proj.shape)
+        # exit()
         for module in self.input_blocks:
+            # print(module)
+            # print(xf_proj.shape)
+            # print(emb.shape)
+            # exit()
             h = module(h, emb, xf_proj)
             hs.append(h)
             # print(h.shape)
         
         h = self.middle_block(h, emb, xf_proj)
+        # print(h.shape)
         for module in self.output_blocks:
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb, xf_proj)
+            # print(h.shape)
         h = h.type(x.dtype)
         h = self.out(h)
+        # print(h.shape)
         return h

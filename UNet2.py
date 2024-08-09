@@ -29,6 +29,7 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
 
     def forward(self, x, emb, encoder_out=None):
         for layer in self:
+            # print(layer)
             if isinstance(layer, TimestepBlock):
                 x = layer(x, emb)
             elif isinstance(layer, AttentionBlock):
@@ -62,7 +63,7 @@ class Upsample(nn.Module):
         if self.dims == 3:
             x = F.interpolate(x, (x.shape[2], x.shape[3] * 2, x.shape[4] * 2), mode="nearest")
         else:
-            x = F.interpolate(x, scale_factor=4, mode="nearest")
+            x = F.interpolate(x, scale_factor=2, mode="nearest")
         if self.use_conv:
             x = self.conv(x)
         return x
@@ -84,7 +85,7 @@ class Downsample(nn.Module):
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.dims = dims
-        stride = 4 if dims != 3 else (1, 2, 2)
+        stride = 2 if dims != 3 else (1, 2, 2)
         if use_conv:
             self.op = conv_nd(dims, self.channels, self.out_channels, 3, stride=stride, padding=1)
         else:
@@ -183,6 +184,8 @@ class ResBlock(TimestepBlock):
         :param emb: an [N x emb_channels] Tensor of timestep embeddings.
         :return: an [N x C x ...] Tensor of outputs.
         """
+
+        # print(emb.shape)
         # print("before", x.shape)
         if self.updown:
             in_rest, in_conv = self.in_layers[:-1], self.in_layers[-1]
