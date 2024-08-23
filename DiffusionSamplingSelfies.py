@@ -12,7 +12,7 @@ from tokenizers import Tokenizer
 from MolTransformerSelfies import MultiTaskTransformer
 from rdkit import Chem
 from rdkit.Chem import Draw
-from pIC50Predictor import pIC50Predictor
+from pIC50Predictor2 import pIC50Predictor
 from SelfiesTok import SelfiesTok
 import selfies as sf
 
@@ -39,6 +39,18 @@ def get_balanced_grad(x, t, prot):
     weights = torch.max(g_norms) / (g_norms + eps).unsqueeze(1)
     g_k = torch.sum(weights * g_t, dim=0).unsqueeze(1)
     return g_k
+
+def get_pIC50_grad(x, prot, t):
+    pic50_model.train()
+    x.requires_grad = True
+    # print(x)
+    # print(prot)
+    # print(t)
+    # print(pic50_model.training)
+    pic50_pred = pic50_model(x, prot, t)
+    # print(pic50_pred.requires_grad)
+    grad = torch.autograd.grad(pic50_pred, x)[0]
+    return grad
 
 with open("hyperparams.yaml", "r") as file:
     config = yaml.safe_load(file)
@@ -77,16 +89,15 @@ num_heads = config["pIC50_model"]["num_heads"]
 lr = config["pIC50_model"]["lr"]
 num_epochs = config["pIC50_model"]["num_epochs"]
 time_embed_dim = config["pIC50_model"]["time_embed_dim"]
-pic50_model = pIC50Predictor(molecule_dim, protein_dim, num_heads, time_embed_dim, n_diff_step).to(device)
-
-# pic50_model.load_state_dict(torch.load('models/pIC50_model.pt', map_location=device))
+pic50_model = pIC50Predictor(n_diff_step, protein_dim).to(device)
+pic50_model.load_state_dict(torch.load('models/pIC50_model.pt', map_location=device))
 # qed_model.load_state_dict(torch.load('models/qed_model.pt', map_location=device))
 # sas_model.load_state_dict(torch.load('models/sas_model.pt', map_location=device))
 
 diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(n_diff_step))
-unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
+unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[4], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
 unet.to(device)
-unet.load_state_dict(torch.load('unet_resized.pt', map_location=device))
+unet.load_state_dict(torch.load('unet_resized_even_attention_4_tuned.pt', map_location=device))
 unet.eval()
 
 if False:
@@ -107,14 +118,16 @@ if False:
     protein_embedding = combined_pooled.detach().to(device)
     np.save("data/3cl.npy", protein_embedding.detach().cpu().numpy())
 else:
-    protein_embedding = torch.tensor(np.load("data/3cl.npy"), device=device)
+    protein_embedding = torch.tensor(np.load("data/3cl.npy"), device=device).reshape(1, -1)
+    # protein_embedding = torch.tensor(np.load("data/protein_embeddings.npy")[53], device=device).reshape(1, -1)
 
 # print(protein_embedding.shape)
 
 # cond_fn = get_balanced_grad()
 
 # sample = diffusion_model.p_sample_loop(unet, (1, 1, input_size), prot=protein_embedding, cond_fn=get_balanced_grad)
-sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_embedding).reshape(input_size)
+sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_embedding, w=3).reshape(input_size)
+# sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_embedding, cond_fn=get_pIC50_grad).reshape(input_size)
 
 # sample = diffusion_model.ddim_sample_loop(unet, (1, 1, input_size), prot=protein_embedding)
 
@@ -144,6 +157,7 @@ try:
 except:
     pass
 
+exit()
 
 import imageio
 import os

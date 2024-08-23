@@ -8,6 +8,7 @@ from transformers import EsmTokenizer, EsmModel
 from MolTransformerSelfies import MultiTaskTransformer
 from rdkit import Chem, DataStructs
 from rdkit.Chem import Draw
+from rdkit.Chem.Scaffolds import MurckoScaffold
 from fcd_torch import FCD
 from SelfiesTok import SelfiesTok
 import numpy as np
@@ -25,6 +26,8 @@ import sascorer
 from rdkit.Chem import Descriptors, QED
 from collections import Counter
 import selfies as sf
+from pIC50Predictor2 import pIC50Predictor
+
 
 # Step 0: Load and generate
 # Step 0.1: Load in the training data (potential source of issue as this includes val but whatever)
@@ -52,10 +55,10 @@ d_ff = config["mol_model"]["d_ff"]
 dropout = config["mol_model"]["dropout"]
 
 diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(n_diff_step))
-unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
+unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[4], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
 mol_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks).to(device)
 
-unet.load_state_dict(torch.load('unet_resized.pt', map_location=device))
+unet.load_state_dict(torch.load('unet_resized_even_attention_4_tuned.pt', map_location=device))
 mol_model.load_state_dict(torch.load('models/selfies_transformer_final.pt', map_location=device))
 
 unet, mol_model = unet.to(device), mol_model.to(device)
@@ -63,19 +66,22 @@ unet, mol_model = unet.to(device), mol_model.to(device)
 # Step 0.3: Pick 40 random proteins and generate 25 molecules per protein
 # Group by Protein Sequence and filter groups that have at least 25 SMILES strings
 ref_data_smiles.reset_index(inplace=True)
-protein_groups = ref_data_smiles.groupby('Protein Sequence').filter(lambda x: len(x) >= 25)
+protein_groups = ref_data_smiles.groupby('Protein Sequence').filter(lambda x: len(x) >= 50)
 
 # Get unique protein sequences that have at least 25 SMILES strings
 unique_proteins = protein_groups['Protein Sequence'].unique()
 
 # Select 40 random unique proteins HERE
-random_proteins = random.sample(list(unique_proteins), 10)
+num_proteins = 20
+per_protein = 50
+
+random_proteins = random.sample(list(unique_proteins), num_proteins)
 
 # For each selected protein, extract 25 random SMILES strings
 selected_rows = []
 for protein in random_proteins:
     protein_df = protein_groups[protein_groups['Protein Sequence'] == protein]
-    selected_smiles = protein_df.sample(15)
+    selected_smiles = protein_df.sample(per_protein)
     selected_rows.append(selected_smiles)
 
 ref_data_smiles_cut = pd.concat(selected_rows)
@@ -86,28 +92,50 @@ protein_fingers_full = np.load("data/protein_embeddings.npy")
 protein_fingers_cut = []
 count = 0
 for protein_idx in protein_indices:
-    if count % 15 == 0:
+    if count % per_protein == 0:
         protein_fingers_cut.append(protein_fingers_full[protein_idx])
     count += 1
 
 # print(len(protein_fingers_cut))
 
+pic50_model = pIC50Predictor(n_diff_step, 1280).to(device)
+pic50_model.load_state_dict(torch.load('models/pIC50_model.pt', map_location=device))
+
+# def get_pIC50_grad(x, prot, t):
+#     pic50_model.train()
+#     x = x.detach().requires_grad_(True)
+#     # print(x)
+#     # print(prot)
+#     # print(t)
+#     # print(pic50_model.training)
+#     pic50_pred = pic50_model(x, prot, t)
+#     # gradients = []
+#     # for i in range(x.shape[0]):
+#     #     grad = torch.autograd.grad(outputs=pic50_pred[i], inputs=x[i])[0].deatch()
+#     #     gradients.append(grad)
+#     # grad = torch.stack(gradients)
+#     # print(pic50_pred.requires_grad)
+#     grad = torch.autograd.grad(pic50_pred.sum(), x)[0].detach()
+#     return grad
+
 # Step 0.3.1: Generate 25 molecules per protein
 samples = torch.tensor([], device=device)
 for protein_finger in protein_fingers_cut:
     protein_finger = torch.tensor(protein_finger, device=device)
-    protein_finger = protein_finger.repeat(10, 1)
-    sample = diffusion_model.p_sample_loop(unet, (10, 256, 128), prot=protein_finger).detach()
+    protein_finger = protein_finger.repeat(per_protein, 1)
+    sample = diffusion_model.p_sample_loop(unet, (per_protein, 256, 128), prot=protein_finger, w=5).detach().reshape(per_protein, 1, 32768)
+    # sample = diffusion_model.p_sample_loop(unet, (10, 256, 128), prot=protein_finger, cond_fn=get_pIC50_grad).detach().reshape(per_protein, 1, 32768)
+
     samples = torch.cat([samples, sample])
 
 # Debug line
-print(samples.shape)
+# print(samples.shape)
 
 # Step 0.3.2: Remember to unnormalize
 mins = torch.tensor(np.load("data/smiles_mins_selfies.npy"), device=device).reshape(1, 1, -1)
 maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy"), device=device).reshape(1, 1, -1)
 sample_rescale = (((samples + 1) / 2) * (maxes - mins) + mins)
-print(sample_rescale.shape)
+# print(sample_rescale.shape)
 
 # Step 0.3.3: Convert from SELFIES back to SMILES
 tokenizer = SelfiesTok.load("models/selfies_tok.json")
@@ -121,35 +149,44 @@ for decode in decoded_smiles:
     predicted_smile = sf.decoder(predicted_selfie)
     gen_smiles.append(predicted_smile)
 
-# Step 0.4: Isolate those 20 proteins and their original 50 molecules as well
+# Assuming protein_indices and sample_rescale are already defined elsewhere in your code
 smiles_fingers_cut = []
 smiles_fingers_full = np.load("data/smiles_output_selfies.npy")
 for protein_idx in protein_indices:
     smiles_fingers_cut.append(smiles_fingers_full[protein_idx].tolist())
 
+# Convert to numpy array
+smiles_fingers_cut = np.array(smiles_fingers_cut)
+
 # Step 0.5: Plot in U-Map with 2 colors
-gen_fingers = sample_rescale.squeeze(1).cpu().tolist()
-# print(gen_fingers[0])
-# print(smiles_fingers_cut[0])
-# print(len(gen_fingers))
-# print(len(smiles_fingers_cut))
-combined_data = gen_fingers + smiles_fingers_cut
+gen_fingers = sample_rescale.squeeze(1).cpu().numpy()
+combined_data = np.concatenate((gen_fingers, smiles_fingers_cut), axis=0)
 
 # Create labels for coloring
-labels = [0] * len(gen_fingers) + [1] * len(smiles_fingers_cut)
+labels = np.array([0] * len(gen_fingers) + [1] * len(smiles_fingers_cut))
+# labels_list = []
+# for idx in range(2 * num_proteins):
+#     labels_list += [idx] * 50
+# labels = np.array(labels_list)
 
-# Convert to numpy array
-combined_data_np = np.array(combined_data)
-print("Data shape:", combined_data_np.shape)
+# Ensure data has a sufficient number of samples
+print("Combined data shape:", combined_data.shape)
 
 # Fit UMAP
 reducer = umap.UMAP()
-embedding = reducer.fit_transform(combined_data_np)
+embedding = reducer.fit_transform(combined_data)
 
 # Plotting
 plt.figure(figsize=(10, 7))
+
+# plt.scatter(embedding[labels == 0, 0], embedding[labels == 0, 1], c='blue', label='Generated 1')
+# plt.scatter(embedding[labels == 1, 0], embedding[labels == 1, 1], c='red', label='Generated 2')
+# plt.scatter(embedding[labels == 2, 0], embedding[labels == 2, 1], c='green', label='Original 1')
+# plt.scatter(embedding[labels == 3, 0], embedding[labels == 3, 1], c='yellow', label='Original 2')
+
 plt.scatter(embedding[labels == 0, 0], embedding[labels == 0, 1], c='blue', label='Generated')
 plt.scatter(embedding[labels == 1, 0], embedding[labels == 1, 1], c='red', label='Original')
+
 plt.legend()
 plt.title('UMAP Projection')
 plt.xlabel('UMAP 1')
@@ -157,11 +194,18 @@ plt.ylabel('UMAP 2')
 plt.savefig("umap.png")
 
 from sklearn.manifold import TSNE
-tsne = TSNE(n_components=2, perplexity=9)
-tsne_embedding = tsne.fit_transform(combined_data_np)
+tsne = TSNE(n_components=2)
+tsne_embedding = tsne.fit_transform(combined_data)
 plt.figure(figsize=(10, 7))
+
+# plt.scatter(tsne_embedding[labels == 0, 0], tsne_embedding[labels == 0, 1], c='blue', label='Generated 1')
+# plt.scatter(tsne_embedding[labels == 1, 0], tsne_embedding[labels == 1, 1], c='red', label='Generated 2')
+# plt.scatter(tsne_embedding[labels == 2, 0], tsne_embedding[labels == 2, 1], c='green', label='Original 1')
+# plt.scatter(tsne_embedding[labels == 3, 0], tsne_embedding[labels == 3, 1], c='yellow', label='Original 2')
+
 plt.scatter(tsne_embedding[labels == 0, 0], tsne_embedding[labels == 0, 1], c='blue', label='Generated')
 plt.scatter(tsne_embedding[labels == 1, 0], tsne_embedding[labels == 1, 1], c='red', label='Original')
+
 plt.legend()
 plt.title('t-SNE Projection')
 plt.xlabel('t-SNE 1')
@@ -201,7 +245,7 @@ print(f"Uniqueness: {len(unique_smiles_list)} / {total}")
 # Step 1.1.3: Novelty
 ref_mols = []
 ref_smiles = []
-ref_data_smiles_cut
+# ref_data_smiles_cut
 for smiles in ref_data_smiles_cut.loc[:,"SMILES String"]:
     ref_smiles.append(smiles)
     mol = Chem.MolFromSmiles(smiles)
@@ -210,12 +254,62 @@ for smiles in ref_data_smiles_cut.loc[:,"SMILES String"]:
 novel_smiles = unique_smiles_set.difference(ref_smiles)
 print(f"Novelty: {len(novel_smiles)} / {total}")
 
+print(len(gen_smiles))
+print(len(ref_smiles))
+
 # Step 1.1.5: FCD
 fcd = FCD(device='cuda:0', n_jobs=1)
-fcd_score = fcd(gen_smiles, ref_smiles)
-print(f"FCD: {fcd_score}")
 
-exit()
+fcd_score = 0
+for idx in range(num_proteins):
+    fcd_score += fcd(gen_smiles[50 * (idx): 50 * (idx + 1)], ref_smiles[50 * (idx): 50 * (idx + 1)])
+
+fcd_score /= num_proteins
+
+# fcd_score = (fcd(gen_smiles[0:50], ref_smiles[0:50]) + fcd(gen_smiles[50:100], ref_smiles[50:100])) / 2
+print(f"FCD: {fcd_score}")
+print(f"FCD Full: {fcd(gen_smiles, ref_smiles)}")
+
+# Step 2.2.1: MW
+def compute_properties(mols):
+    properties = {'MW': [], 'logP': [], 'SA': [], 'QED': []}
+    for mol in mols:
+        if mol is not None:
+            properties['MW'].append(Descriptors.MolWt(mol))
+            properties['logP'].append(Descriptors.MolLogP(mol))
+            properties['SA'].append(sascorer.calculateScore(mol))
+            properties['QED'].append(QED.qed(mol))
+    return properties
+
+# Compute properties for reference and generated molecules
+ref_properties = compute_properties(ref_mols)
+gen_properties = compute_properties(gen_mols)
+
+# Compute Wasserstein distances
+wasserstein_distances = {}
+for prop in ref_properties:
+    wasserstein_distances[prop] = wasserstein_distance(ref_properties[prop], gen_properties[prop])
+
+print("Wasserstein Distances:")
+for prop, dist in wasserstein_distances.items():
+    print(f"{prop}: {dist}")
+
+# Plot distributions
+fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+
+def plot_distribution(ax, ref_data, gen_data, title):
+    ax.hist(ref_data, bins=30, alpha=0.5, label='Reference')
+    ax.hist(gen_data, bins=30, alpha=0.5, label='Generated')
+    ax.set_title(title)
+    ax.legend()
+
+plot_distribution(axs[0, 0], ref_properties['MW'], gen_properties['MW'], 'Molecular Weight')
+plot_distribution(axs[0, 1], ref_properties['logP'], gen_properties['logP'], 'LogP')
+plot_distribution(axs[1, 0], ref_properties['SA'], gen_properties['SA'], 'SAS')
+plot_distribution(axs[1, 1], ref_properties['QED'], gen_properties['QED'], 'QED')
+
+plt.tight_layout()
+plt.savefig("descriptors.png")
 
 # Step 1.1.4: KL-divergence
 pc_descriptor_subset = [
@@ -274,46 +368,6 @@ snn = 1 / total * np.sum(np.max(pairwise_sim, axis=0))
 print(f"SNN: {snn}")
 
 # Step 2.2: Compute Wasserstein and plot MW, logP, SA, QED
-# Step 2.2.1: MW
-def compute_properties(mols):
-    properties = {'MW': [], 'logP': [], 'SA': [], 'QED': []}
-    for mol in mols:
-        if mol is not None:
-            properties['MW'].append(Descriptors.MolWt(mol))
-            properties['logP'].append(Descriptors.MolLogP(mol))
-            properties['SA'].append(sascorer.calculateScore(mol))
-            properties['QED'].append(QED.qed(mol))
-    return properties
-
-# Compute properties for reference and generated molecules
-ref_properties = compute_properties(ref_mols)
-gen_properties = compute_properties(gen_mols)
-
-# Compute Wasserstein distances
-wasserstein_distances = {}
-for prop in ref_properties:
-    wasserstein_distances[prop] = wasserstein_distance(ref_properties[prop], gen_properties[prop])
-
-print("Wasserstein Distances:")
-for prop, dist in wasserstein_distances.items():
-    print(f"{prop}: {dist}")
-
-# Plot distributions
-fig, axs = plt.subplots(2, 2, figsize=(14, 10))
-
-def plot_distribution(ax, ref_data, gen_data, title):
-    ax.hist(ref_data, bins=30, alpha=0.5, label='Reference')
-    ax.hist(gen_data, bins=30, alpha=0.5, label='Generated')
-    ax.set_title(title)
-    ax.legend()
-
-plot_distribution(axs[0, 0], ref_properties['MW'], gen_properties['MW'], 'Molecular Weight')
-plot_distribution(axs[0, 1], ref_properties['logP'], gen_properties['logP'], 'LogP')
-plot_distribution(axs[1, 0], ref_properties['SA'], gen_properties['SA'], 'Surface Area')
-plot_distribution(axs[1, 1], ref_properties['QED'], gen_properties['QED'], 'QED')
-
-plt.tight_layout()
-plt.savefig("descriptors.png")
 
 # Step 2.3: Compute Frag, Scaff (implement later)
 
@@ -365,12 +419,25 @@ print(f"Scaff Score: {scaff_score}")
 
 # Step 3: Experiments with real proteins
 # Step 3.1: Load in real protein (3cl protease)
+exit()
+def compute_properties(mols):
+    properties = {'MW': [], 'logP': [], 'SA': [], 'QED': []}
+    for mol in mols:
+        if mol is not None:
+            properties['MW'].append(Descriptors.MolWt(mol))
+            properties['logP'].append(Descriptors.MolLogP(mol))
+            properties['SA'].append(sascorer.calculateScore(mol))
+            properties['QED'].append(QED.qed(mol))
+    return properties
+
 cl3 = torch.tensor(np.load("data/3cl.npy"), device=device).repeat(100, 1)
 
 # # Step 3.2: Run model on this protein and generate 100 compounds
-
-sample_cl3 = diffusion_model.p_sample_loop(unet, (100, 256, 128), prot=cl3).detach()
-sample_cl3_rescale = (((sample + 1) / 2) * (maxes - mins) + mins)
+tokenizer = SelfiesTok.load("models/selfies_tok.json")
+mins = torch.tensor(np.load("data/smiles_mins_selfies.npy"), device=device).reshape(1, 1, -1)
+maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy"), device=device).reshape(1, 1, -1)
+sample_cl3 = diffusion_model.p_sample_loop(unet, (100, 256, 128), prot=cl3).reshape(100, 1, -1).detach()
+sample_cl3_rescale = (((sample_cl3 + 1) / 2) * (maxes - mins) + mins)
 
 with torch.no_grad():
     decoded_smiles_cl3, _ = mol_model.decode_representation(sample_cl3_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
@@ -388,7 +455,7 @@ for decode in decoded_smiles_cl3:
 count = 0
 for gen_mol_cl3 in gen_mols_cl3:
     img = Draw.MolToImage(gen_mol_cl3)
-    img_path = f'imgs/cl3/cl3_ligand_{count}' 
+    img_path = f'imgs/cl3/cl3_ligand_{count}.png' 
     img.save(img_path)
     count += 1
 

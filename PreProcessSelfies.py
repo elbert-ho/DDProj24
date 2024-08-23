@@ -18,7 +18,7 @@ import selfies as sf
 from SelfiesTok import SelfiesTok
 # Suppress warnings
 RDLogger.DisableLog('rdApp.*')
-ESM = False
+ESM = True
 smiles_only = True
 
 def save_batch(data, filename):
@@ -34,7 +34,7 @@ if ESM:
 with open("hyperparams.yaml", "r") as file:
     config = yaml.safe_load(file)
 
-df = pd.read_csv('data/protein_drug_pairs_with_sequences_and_smiles.csv')
+df = pd.read_csv('data/protein_drug_pairs_with_sequences_and_smiles_cleaned2.csv')
 src_vocab_size = config["mol_model"]["src_vocab_size"]
 tgt_vocab_size = config["mol_model"]["tgt_vocab_size"]
 max_seq_length = config["mol_model"]["max_seq_length"]
@@ -85,6 +85,8 @@ for batch_index in tqdm.tqdm(range(num_batches)):
             protein_sequence = row['Protein Sequence']
         smiles_string = row['SMILES String']
         
+        # print(smiles_string)
+
         if not smiles_only:
             pIC50 = row['pIC50']
 
@@ -145,7 +147,7 @@ for batch_index in tqdm.tqdm(range(num_batches)):
         save_batch(protein_embeddings_batch, f'data/protein_embeddings_batch_{batch_index}.npy')
     
     save_batch(smiles_output_batch, f'data/smiles_output_batch_{batch_index}.npy')
-    save_batch(smiles_fingerprint_batch, f'data/smiles_fingerprint_batch_{batch_index}.npy')
+    # save_batch(smiles_fingerprint_batch, f'data/smiles_fingerprint_batch_{batch_index}.npy')
     
     if not smiles_only:
         save_batch(pIC50_batch, f'data/pIC50_batch_{batch_index}.npy')
@@ -159,10 +161,10 @@ def load_batches(pattern):
 
 if ESM:
     protein_embeddings_array = load_batches('protein_embeddings_batch_')
-    np.save('data/protein_embeddings.npy', protein_embeddings_array)
+    np.save('data/protein_embeddings2.npy', protein_embeddings_array)
 
 smiles_output_array = load_batches('smiles_output_batch_')
-smiles_fingerprint_array = load_batches('smiles_fingerprint_batch_')
+# smiles_fingerprint_array = load_batches('smiles_fingerprint_batch_')
 
 if not smiles_only:
     pIC50_array = load_batches('pIC50_batch_')
@@ -170,8 +172,8 @@ if not smiles_only:
     sas_array = load_batches('sas_batch_')
 
 # Save the concatenated results
-np.save('data/smiles_output_selfies.npy', smiles_output_array)
-np.save('data/smiles_fingerprint_selfies.npy', smiles_fingerprint_array)
+np.save('data/smiles_output_selfies2.npy', smiles_output_array)
+# np.save('data/smiles_fingerprint_selfies.npy', smiles_fingerprint_array)
 
 if not smiles_only:
     np.save('data/pIC50.npy', pIC50_array)
@@ -180,4 +182,5 @@ if not smiles_only:
 
 for i in range(num_batches):
     os.remove(f'data/smiles_output_batch_{i}.npy')
-    os.remove(f'data/smiles_fingerprint_batch_{i}.npy')
+    # os.remove(f'data/smiles_fingerprint_batch_{i}.npy')
+    os.remove(f'data/protein_embeddings_batch_{i}.npy')

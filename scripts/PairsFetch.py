@@ -7,7 +7,7 @@ target = new_client.target
 activity = new_client.activity
 
 # Define a function to get protein-drug pairs with IC50 values and convert to pIC50
-def get_protein_drug_pairs(limit=100, max_pairs_per_protein=5):
+def get_protein_drug_pairs(limit=1000, max_pairs_per_protein=5):
     # Search for human proteins
     targets = target.filter(organism__icontains='Homo sapiens')
     

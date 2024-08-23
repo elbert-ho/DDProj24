@@ -126,7 +126,7 @@ class GaussianDiffusion:
         )
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
     
-    def p_mean_variance(self, model, x, t, prot=None, clip_denoised=True, denoised_fn=None, model_kwargs=None):
+    def p_mean_variance(self, model, x, t, prot=None, w=-1, clip_denoised=True, denoised_fn=None, model_kwargs=None):
         """
         Apply the model to get p(x_{t-1} | x_t), as well as a prediction of
         the initial x, x_0.
@@ -166,6 +166,13 @@ class GaussianDiffusion:
         frac = (model_var_values + 1) / 2
         model_log_variance = frac * max_log + (1 - frac) * min_log
         model_variance = torch.exp(model_log_variance)
+
+        CFG = (w != -1)
+        if CFG:
+            model_output_cfg = model(x, t, torch.zeros_like(prot))
+            assert model_output_cfg.shape == (B, C * 2, *x.shape[2:])
+            model_output_cfg, _ = torch.split(model_output_cfg, C, dim=1)
+            model_output = (1 + w) * model_output - w * model_output_cfg
 
         def process_xstart(x):
             if denoised_fn is not None:
@@ -208,8 +215,10 @@ class GaussianDiffusion:
 
         This uses the conditioning strategy from Sohl-Dickstein et al. (2015).
         """
-        gradient = cond_fn(x, t, prot)
-        new_mean = p_mean_var["mean"].float() + p_mean_var["variance"] * gradient.float()
+        with torch.enable_grad():
+            gradient = cond_fn(x, prot, t)
+        grad_scale = 2
+        new_mean = p_mean_var["mean"].float() + grad_scale * p_mean_var["variance"] * gradient.float()
         return new_mean
 
     def condition_score(self, cond_fn, p_mean_var, x, t, prot=None, model_kwargs=None):
@@ -238,6 +247,7 @@ class GaussianDiffusion:
         x,
         t,
         prot=None,
+        w=3,
         clip_denoised=True,
         denoised_fn=None,
         cond_fn=None,
@@ -265,6 +275,7 @@ class GaussianDiffusion:
             x,
             t,
             prot=prot,
+            w=w,
             clip_denoised=clip_denoised,
             denoised_fn=denoised_fn,
             model_kwargs=model_kwargs,
@@ -283,6 +294,7 @@ class GaussianDiffusion:
         model,
         shape,
         prot=None,
+        w=3,
         noise=None,
         clip_denoised=True,
         denoised_fn=None,
@@ -315,6 +327,7 @@ class GaussianDiffusion:
             model,
             shape,
             prot=prot,
+            w=w,
             noise=noise,
             clip_denoised=clip_denoised,
             denoised_fn=denoised_fn,
@@ -331,6 +344,7 @@ class GaussianDiffusion:
         model,
         shape,
         prot=None,
+        w=3,
         noise=None,
         clip_denoised=True,
         denoised_fn=None,
@@ -370,6 +384,7 @@ class GaussianDiffusion:
                     img,
                     t,
                     prot=prot,
+                    w=w,
                     clip_denoised=clip_denoised,
                     denoised_fn=denoised_fn,
                     cond_fn=cond_fn,
@@ -518,7 +533,7 @@ class GaussianDiffusion:
                 yield out
                 img = out["sample"]
 
-    def training_losses(self, model, x_start, t, prot, noise=None):
+    def training_losses(self, model, x_start, t, prot, noise=None, debug=False):
         """
         Compute training losses for a single timestep.
 
@@ -542,6 +557,9 @@ class GaussianDiffusion:
         # Learn the variance using the variational bound, but don't let
         # it affect our mean prediction.
         frozen_out = torch.cat([model_output.detach(), model_var_values], dim=1)
+        if(debug):
+            print(f"t: {t}, output: {torch.sum(model_output)}")
+
         terms["vb"] = self._vb_terms_bpd(
             model=lambda *args, r=frozen_out: r,
             x_start=x_start,

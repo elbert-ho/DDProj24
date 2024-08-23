@@ -13,6 +13,6 @@ class pIC50Dataset(Dataset):
 
     def __getitem__(self, idx):
         protein_cls = torch.tensor(self.protein_data[idx], dtype=torch.float32)
-        smiles_string = torch.tensor(self.smiles_data[idx], dtype=torch.float32)
+        smiles_string = torch.tensor(self.smiles_data[idx], dtype=torch.float32).reshape(256, 128)
         pIC50 = torch.tensor(self.pIC50_data[idx], dtype=torch.float32)
         return smiles_string, protein_cls, pIC50

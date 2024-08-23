@@ -32,6 +32,23 @@
 # print(remove_salts("CC[N+](CC)(CC)Cc1c2ccoc2c(OC)c2oc(=O)ccc12.[Cl-]"))
 
 
-from MolLoaderSelfies import SMILESDataset
-dataset = SMILESDataset("data/smiles_10000_selected_features_cleaned.csv", vocab_size=1000, max_length=128, tokenizer_path=None)
-print(len(dataset.tokenizer.token_to_id))
+# from MolLoaderSelfies import SMILESDataset
+# dataset = SMILESDataset("data/smiles_10000_selected_features_cleaned.csv", vocab_size=1000, max_length=128, tokenizer_path=None)
+# print(len(dataset.tokenizer.token_to_id))
+
+from pIC50Predictor2 import pIC50Predictor
+import torch
+device="cuda"
+pic50_model = pIC50Predictor(1000, 1280).to(device)
+pic50_model.load_state_dict(torch.load('models/pIC50_model.pt', map_location=device))
+x = torch.randn(1, 256, 128, device=device)
+prot = torch.randn(1, 1280, device=device)
+t = torch.randint(0, 1000, (1,), device=device)
+# x.requires_grad = True
+print(x.requires_grad)
+print(x)
+print(prot)
+print(t)
+output = pic50_model(x, prot, t)
+print(output.requires_grad)
+print(pic50_model.training)

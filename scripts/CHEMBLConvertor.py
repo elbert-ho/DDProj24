@@ -45,7 +45,7 @@ def get_protein_and_smiles(protein_chembl_id, drug_chembl_id):
         return None, None
 
 # Read the input CSV
-input_df = pd.read_csv('../data/protein_drug_pairs.csv')
+input_df = pd.read_csv('../data/protein_drug_pairs2.csv')
 
 # Prepare lists for the new columns
 protein_sequences = []
@@ -55,7 +55,6 @@ smiles_strings = []
 for index, row in tqdm(input_df.iterrows(), total=len(input_df)):
     protein_chembl_id = row['Protein ChEMBL ID']
     drug_chembl_id = row['Drug ChEMBL ID']
-    pIC50 = row['pIC50']
     
     protein_sequence, smiles_string = get_protein_and_smiles(protein_chembl_id, drug_chembl_id)
     
@@ -69,10 +68,9 @@ for index, row in tqdm(input_df.iterrows(), total=len(input_df)):
 # Create the output DataFrame
 output_df = pd.DataFrame({
     'Protein Sequence': protein_sequences,
-    'SMILES String': smiles_strings,
-    'pIC50': input_df['pIC50']
+    'SMILES String': smiles_strings
 })
 
 # Save to CSV
-output_df.to_csv('../data/protein_drug_pairs_with_sequences_and_smiles.csv', index=False)
+output_df.to_csv('../data/protein_drug_pairs_with_sequences_and_smiles2.csv', index=False)
 print("Converted data has been saved to 'protein_drug_pairs_with_sequences_and_smiles.csv'.")

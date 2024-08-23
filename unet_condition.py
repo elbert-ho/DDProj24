@@ -124,12 +124,9 @@ class Text2ImUNet(UNetModel):
             # print(h.shape)
         
         h = self.middle_block(h, emb, xf_proj)
-        # print(h.shape)
         for module in self.output_blocks:
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb, xf_proj)
-            # print(h.shape)
         h = h.type(x.dtype)
         h = self.out(h)
-        # print(h.shape)
         return h
