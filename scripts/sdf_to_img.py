@@ -3,7 +3,7 @@ from rdkit.Chem import Draw
 from rdkit.Chem import AllChem
 
 # Load the molecule from the SDF file
-suppl = Chem.SDMolSupplier('../ligands/ligand097.sdf')
+suppl = Chem.SDMolSupplier('../ligands_cl3/ligand026.sdf')
 mol = suppl[0]
 
 if mol is None:
@@ -21,4 +21,4 @@ AllChem.Compute2DCoords(mol_2d)
 
 # Draw the 2D image and save it
 img = Draw.MolToImage(mol_2d)
-img.save('../ligand097.png')
+img.save('../ligand_img.png')

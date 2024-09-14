@@ -19,7 +19,9 @@ mol_model:
   tokenizer_file: "models/smiles_tokenizer_10K_full.json"
   
 protein_model:
-  protein_embedding_dim: 1280
+  # protein_embedding_dim: 1280
+  protein_embedding_dim: 3
+
 
 diffusion_model:
   epochs: 100

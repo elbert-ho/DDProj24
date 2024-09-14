@@ -164,3 +164,8 @@ cython_debug/
 *.db
 /imgs
 *.pt
+*.pdb
+*.pdbqt
+*.png
+*.sdf
+*.pth

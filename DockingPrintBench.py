@@ -18,6 +18,9 @@ def extract_top_docking_scores(sdf_folder):
             if file_scores:
                 top_scores.append(min(file_scores))  # Get the best (lowest) score in the file
 
+            if min(file_scores) < -7:
+                print(file_name)
+
     return top_scores
 
 def calculate_statistics(scores):
@@ -34,7 +37,7 @@ def main():
     if not top_scores:
         print("No docking scores found.")
         return
-    index_min = top_scores[np.argmin(top_scores)]
+    index_min = np.argmin(top_scores)
     average_score, top_10_percent = calculate_statistics(top_scores)
 
     print(f"Average Docking Score: {average_score}")

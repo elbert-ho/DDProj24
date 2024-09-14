@@ -20,13 +20,14 @@ from SelfiesTok import SelfiesTok
 RDLogger.DisableLog('rdApp.*')
 ESM = True
 smiles_only = True
+save_smiles = False
 
 def save_batch(data, filename):
     np.save(filename, np.array(data))
 
 if ESM:
 # Load ESM-2 model for protein processing
-    protein_model_name = "facebook/esm2_t30_150M_UR50D"
+    protein_model_name = "facebook/esm2_t6_8M_UR50D"
     protein_tokenizer = EsmTokenizer.from_pretrained(protein_model_name)
     protein_model = EsmModel.from_pretrained(protein_model_name).to('cuda')
 
@@ -34,6 +35,7 @@ if ESM:
 with open("hyperparams.yaml", "r") as file:
     config = yaml.safe_load(file)
 
+# df = pd.read_csv('data/protein_drug_pairs_with_sequences_and_smiles_cleaned.csv')
 df = pd.read_csv('data/protein_drug_pairs_with_sequences_and_smiles_cleaned2.csv')
 src_vocab_size = config["mol_model"]["src_vocab_size"]
 tgt_vocab_size = config["mol_model"]["tgt_vocab_size"]
@@ -54,13 +56,14 @@ pretrain_epochs = config["mol_model"]["pretrain_epochs"]
 pretrain_learning_rate = config["mol_model"]["pretrain_learning_rate"]
 tok_file = config["mol_model"]["tokenizer_file"]
 
-smiles_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks)
-smiles_model.load_state_dict(torch.load('models/selfies_transformer_final.pt'))
-# Ensure the model is on the correct device
-smiles_model.to(device)
-tokenizer = SelfiesTok.load("models/selfies_tok.json")
-# Initialize the dataset and dataloaders
-smiles_model.eval()
+if save_smiles:
+    smiles_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks)
+    smiles_model.load_state_dict(torch.load('models/selfies_transformer_final.pt'))
+    # Ensure the model is on the correct device
+    smiles_model.to(device)
+    tokenizer = SelfiesTok.load("models/selfies_tok.json")
+    # Initialize the dataset and dataloaders
+    smiles_model.eval()
 
 batch_size = 1000
 num_batches = len(df) // batch_size + int(len(df) % batch_size > 0)
@@ -95,24 +98,29 @@ for batch_index in tqdm.tqdm(range(num_batches)):
             # Generate protein embeddings
             with torch.no_grad():
                 protein_outputs = protein_model(**encoded_protein)
+                # print(protein_outputs.last_hidden_state.shape)
+                # exit()
                 protein_embeddings = protein_outputs.last_hidden_state
 
                 # Mean and Max Pooling
+                # print(protein_embeddings.shape)
                 mean_pooled = protein_embeddings.mean(dim=1)
-                max_pooled = protein_embeddings.max(dim=1).values
-                combined_pooled = torch.cat((mean_pooled, max_pooled), dim=1)
+                # max_pooled = protein_embeddings.max(dim=1).values
+                # combined_pooled = torch.cat((mean_pooled, max_pooled), dim=1)
+                combined_pooled = mean_pooled
 
         # Preprocess and encode 
         
-        selfies_toks = sf.split_selfies(sf.encoder(smiles_string))
-        selfies_toks = tokenizer.encode(["[CLS]"] + list(selfies_toks) + ["[EOS]"])
-        ids = selfies_toks + [tokenizer.token_to_id["[PAD]"]] * (max_seq_length - len(selfies_toks))
-        ids = ids[:max_seq_length] 
-        tokenized_smiles = ids
-        encoded_smiles = torch.tensor(tokenized_smiles).unsqueeze(0).to('cuda')
-        smiles_output = smiles_model.encode_smiles(encoded_smiles)
-        smiles_full = smiles_output[0].flatten().cpu().detach().numpy()
-        smiles_fingerprint = smiles_output[1].flatten().cpu().detach().numpy()
+        if save_smiles:
+            selfies_toks = sf.split_selfies(sf.encoder(smiles_string))
+            selfies_toks = tokenizer.encode(["[CLS]"] + list(selfies_toks) + ["[EOS]"])
+            ids = selfies_toks + [tokenizer.token_to_id["[PAD]"]] * (max_seq_length - len(selfies_toks))
+            ids = ids[:max_seq_length] 
+            tokenized_smiles = ids
+            encoded_smiles = torch.tensor(tokenized_smiles).unsqueeze(0).to('cuda')
+            smiles_output = smiles_model.encode_smiles(encoded_smiles)
+            smiles_full = smiles_output[0].flatten().cpu().detach().numpy()
+            smiles_fingerprint = smiles_output[1].flatten().cpu().detach().numpy()
 
         if not smiles_only:
             # Calculate QED and SAS
@@ -127,8 +135,10 @@ for batch_index in tqdm.tqdm(range(num_batches)):
         # Collect result
         if ESM:
             protein_embeddings_batch.append(combined_pooled.cpu().numpy())
-        smiles_output_batch.append(smiles_full)
-        smiles_fingerprint_batch.append(smiles_fingerprint)
+        
+        if save_smiles:
+            smiles_output_batch.append(smiles_full)
+            smiles_fingerprint_batch.append(smiles_fingerprint)
         
         if not smiles_only:
             pIC50_batch.append(pIC50)
@@ -138,7 +148,9 @@ for batch_index in tqdm.tqdm(range(num_batches)):
         # Clean up
         if ESM:
             del protein_outputs, encoded_protein
-        del encoded_smiles, smiles_output
+        
+        if save_smiles:
+            del encoded_smiles, smiles_output
         torch.cuda.empty_cache()
         gc.collect()
 
@@ -146,7 +158,8 @@ for batch_index in tqdm.tqdm(range(num_batches)):
     if ESM:
         save_batch(protein_embeddings_batch, f'data/protein_embeddings_batch_{batch_index}.npy')
     
-    save_batch(smiles_output_batch, f'data/smiles_output_batch_{batch_index}.npy')
+    if save_smiles:
+        save_batch(smiles_output_batch, f'data/smiles_output_batch_{batch_index}.npy')
     # save_batch(smiles_fingerprint_batch, f'data/smiles_fingerprint_batch_{batch_index}.npy')
     
     if not smiles_only:
@@ -161,9 +174,10 @@ def load_batches(pattern):
 
 if ESM:
     protein_embeddings_array = load_batches('protein_embeddings_batch_')
-    np.save('data/protein_embeddings2.npy', protein_embeddings_array)
+    np.save('data/protein_embeddings4.npy', protein_embeddings_array)
 
-smiles_output_array = load_batches('smiles_output_batch_')
+if save_smiles:
+    smiles_output_array = load_batches('smiles_output_batch_')
 # smiles_fingerprint_array = load_batches('smiles_fingerprint_batch_')
 
 if not smiles_only:
@@ -172,7 +186,8 @@ if not smiles_only:
     sas_array = load_batches('sas_batch_')
 
 # Save the concatenated results
-np.save('data/smiles_output_selfies2.npy', smiles_output_array)
+if save_smiles:
+    np.save('data/smiles_output_selfies2.npy', smiles_output_array)
 # np.save('data/smiles_fingerprint_selfies.npy', smiles_fingerprint_array)
 
 if not smiles_only:
@@ -181,6 +196,6 @@ if not smiles_only:
     np.save('data/sas.npy', sas_array)
 
 for i in range(num_batches):
-    os.remove(f'data/smiles_output_batch_{i}.npy')
+    # os.remove(f'data/smiles_output_batch_{i}.npy')
     # os.remove(f'data/smiles_fingerprint_batch_{i}.npy')
     os.remove(f'data/protein_embeddings_batch_{i}.npy')

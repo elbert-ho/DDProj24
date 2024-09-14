@@ -95,13 +95,13 @@ pic50_model.load_state_dict(torch.load('models/pIC50_model.pt', map_location=dev
 # sas_model.load_state_dict(torch.load('models/sas_model.pt', map_location=device))
 
 diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(n_diff_step))
-unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[4], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
+unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
 unet.to(device)
-unet.load_state_dict(torch.load('unet_resized_even_attention_4_tuned.pt', map_location=device))
+unet.load_state_dict(torch.load('unet_resized_odd-830.pt', map_location=device))
 unet.eval()
 
 if False:
-    protein_sequence = "SGFRKMAFPSGKVEGCMVQVTCGTTTLNGLWLDDVVYCPRHVICTSEDMLNPNYEDLLIRKSNHNFLVQAGNVQLRVIGHSMQNCVLKLKVDTANPKTPKYKFVRIQPGQTFSVLACYNGSPSGVYQCAMRPNFTIKGSFLNGSCGSVGFNIDYDCVSFCYMHHMELPTGVHAGTDLEGNFYGPFVDRQTAQAAGTDTTITVNVLAWLYAAVINGDRWFLNRFTTTLNDFNLVAMKYNYEPLTQDHVDILGPLSAQTGIAVLDMCASLKELLQNGMNGRTILGSALLEDEFTPFDVVRQCSGVTFQ"
+    protein_sequence = "KNPCCSHPCQNRGVCMSVGFDQYKCDCTRTGFYGENCSTPEFLTRIKLFLKPTPNTVHYILTHFKGFWNVVNNIPFLRNAIMSYVLTSRSHLIDSPPTYNADYGYKSWEAFSNLSYYTRALPPVPDDCPTPLGVKGKKQLPDSNEIVEKLLLRRKFIPDPQGSNMMFAFFAQHFTHQFFKTDHKRGPAFTNGLGHGVDLNHIYGETLARQRKLRLFKDGKMKYQIIDGEMYPPTVKDTQAEMIYPPQVPEHLRFAVGQEVFGLVPGLMMYATIWLREHNRVCDVLKQEHPEWGDEQLFQTSRLILIGETIKIVIEDYVQHLSGYHFKLKFDPELLFNKQFQYQNRIAAEFNTLYHWHPLLPDTFQIHDQKYNYQQFIYNNSILLEHGITQFVESFTRQIAGRVAGGRNVPPAVQKVSQASIDQSRQMKYQSFNEYRKRFMLKPYESFEELTGEKEMSAELEALYGDIDAVELYPALLVEKPRPDAIFGETMVEVGAPFSLKGLMGNVICSPAYWKPSTFGGEVGFQIINTASIQSLICNNVKGCPFTSFSVPD"
     protein_model_name = "facebook/esm2_t30_150M_UR50D"
     protein_tokenizer = EsmTokenizer.from_pretrained(protein_model_name)
     protein_model = EsmModel.from_pretrained(protein_model_name).to('cuda')
@@ -116,17 +116,17 @@ if False:
         max_pooled = protein_embeddings.max(dim=1).values
         combined_pooled = torch.cat((mean_pooled, max_pooled), dim=1)
     protein_embedding = combined_pooled.detach().to(device)
-    np.save("data/3cl.npy", protein_embedding.detach().cpu().numpy())
+    # np.save("data/3cl.npy", protein_embedding.detach().cpu().numpy())
 else:
-    protein_embedding = torch.tensor(np.load("data/3cl.npy"), device=device).reshape(1, -1)
-    # protein_embedding = torch.tensor(np.load("data/protein_embeddings.npy")[53], device=device).reshape(1, -1)
+    # protein_embedding = torch.tensor(np.load("data/3cl.npy"), device=device).reshape(1, -1)
+    protein_embedding = torch.tensor(np.load("data/protein_embeddings.npy")[0], device=device).reshape(1, -1)
 
 # print(protein_embedding.shape)
 
 # cond_fn = get_balanced_grad()
 
 # sample = diffusion_model.p_sample_loop(unet, (1, 1, input_size), prot=protein_embedding, cond_fn=get_balanced_grad)
-sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_embedding, w=3).reshape(input_size)
+sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_embedding, w=5).reshape(input_size)
 # sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_embedding, cond_fn=get_pIC50_grad).reshape(input_size)
 
 # sample = diffusion_model.ddim_sample_loop(unet, (1, 1, input_size), prot=protein_embedding)

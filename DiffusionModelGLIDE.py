@@ -126,7 +126,7 @@ class GaussianDiffusion:
         )
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
     
-    def p_mean_variance(self, model, x, t, prot=None, w=-1, clip_denoised=True, denoised_fn=None, model_kwargs=None):
+    def p_mean_variance(self, model, x, t, prot=None, w=3, clip_denoised=True, denoised_fn=None, model_kwargs=None):
         """
         Apply the model to get p(x_{t-1} | x_t), as well as a prediction of
         the initial x, x_0.
@@ -173,6 +173,7 @@ class GaussianDiffusion:
             assert model_output_cfg.shape == (B, C * 2, *x.shape[2:])
             model_output_cfg, _ = torch.split(model_output_cfg, C, dim=1)
             model_output = (1 + w) * model_output - w * model_output_cfg
+            # print(w)
 
         def process_xstart(x):
             if denoised_fn is not None:
@@ -286,6 +287,7 @@ class GaussianDiffusion:
         )  # no noise when t == 0
         if cond_fn is not None:
             out["mean"] = self.condition_mean(cond_fn, out, x, t, prot, model_kwargs=model_kwargs)
+
         sample = out["mean"] + nonzero_mask * torch.exp(0.5 * out["log_variance"]) * noise
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
@@ -368,7 +370,7 @@ class GaussianDiffusion:
             img = noise
         else:
             img = torch.randn(*shape, device=device)
-        indices = list(range(self.num_timesteps))[::-1]
+        indices = list(range(self.num_timesteps - 1))[::-1]
 
         if progress:
             # Lazy import so that we don't depend on tqdm.
