@@ -4,7 +4,7 @@ import torch
 import yaml
 from DiffusionModelGLIDE import *
 from tqdm import tqdm
-from unet_condition import Text2ImUNet
+from unet_condition2 import Text2ImUNet
 from transformers import EsmTokenizer, EsmModel
 from MolTransformerSelfies import MultiTaskTransformer
 from rdkit import Chem, DataStructs
@@ -51,7 +51,7 @@ diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(n_diff_step))
 unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
 mol_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks).to(device)
 
-unet.load_state_dict(torch.load('unet_resized_even.pt', map_location=device))
+unet.load_state_dict(torch.load('unet_resized_odd.pt', map_location=device))
 mol_model.load_state_dict(torch.load('models/selfies_transformer_final.pt', map_location=device))
 
 unet, mol_model = unet.to(device), mol_model.to(device)
@@ -89,26 +89,28 @@ protein_sequence = "MASWSHPQFEKGGGARGGSGGGSWSHPQFEKGFDYKDDDDKGTMTEGARAADEVRVPLGA
 
 # protein_sequence = "MSGPRAGFYRQELNKTVWEVPQRLQGLRPVGSGAYGSVCSAYDARLRQKVAVKKLSRPFQSLIHARRTYRELRLLKHLKHENVIGLLDVFTPATSIEDFSEVYLVTTLMGADLNNIVKCQALSDEHVQFLVYQLLRGLKYIHSAGIIHRDLKPSNVAVNEDCELRILDFGLARQADEEMTGYVATRWYRAPEIMLNWMHYNQTVDIWSVGCIMAELLQGKALFPGSDYIDQLKRIMEVVGTPSPEVLAKISSEHARTYIQSLPPMPQKDLSSIFRGANPLAIDLLGRMLVLDSDQRVSAAEALAHAYFSQYHDPEDEPEAEPYDESVEAKERTLEEWKELTYQEVLSFKPPEPPKPPGSLEIEQ"
 
-protein_model_name = "facebook/esm2_t6_8M_UR50D"
-protein_tokenizer = EsmTokenizer.from_pretrained(protein_model_name)
-protein_model = EsmModel.from_pretrained(protein_model_name).to('cuda')
-encoded_protein = protein_tokenizer(protein_sequence, return_tensors='pt', padding=True, truncation=True).to('cuda')
-# Generate protein embeddings
-with torch.no_grad():
-    protein_outputs = protein_model(**encoded_protein)
-    protein_embeddings = protein_outputs.last_hidden_state
+# protein_model_name = "facebook/esm2_t6_8M_UR50D"
+# protein_tokenizer = EsmTokenizer.from_pretrained(protein_model_name)
+# protein_model = EsmModel.from_pretrained(protein_model_name).to('cuda')
+# encoded_protein = protein_tokenizer(protein_sequence, return_tensors='pt', padding=True, truncation=True).to('cuda')
+# # Generate protein embeddings
+# with torch.no_grad():
+#     protein_outputs = protein_model(**encoded_protein)
+#     protein_embeddings = protein_outputs.last_hidden_state
 
-    # representation = model_reg.get_rep(protein_sequence).flatten().detach().cpu().numpy()
-    # Mean and Max Pooling
-    mean_pooled = protein_embeddings.mean(dim=1)
-    # max_pooled = protein_embeddings.max(dim=1).values
-    # combined_pooled = torch.cat((mean_pooled, max_pooled), dim=1)
-    combined_pooled = mean_pooled
-# protein_embedding = representation
-protein_embedding = combined_pooled
+#     # representation = model_reg.get_rep(protein_sequence).flatten().detach().cpu().numpy()
+#     # Mean and Max Pooling
+#     mean_pooled = protein_embeddings.mean(dim=1)
+#     # max_pooled = protein_embeddings.max(dim=1).values
+#     # combined_pooled = torch.cat((mean_pooled, max_pooled), dim=1)
+#     combined_pooled = mean_pooled
+# # protein_embedding = representation
+# protein_embedding = combined_pooled
 
-protein_finger1 = torch.tensor(protein_embedding.reshape(1, -1), device=device)
-protein_finger = protein_finger1.repeat(50, 1)
+# protein_finger1 = torch.tensor(protein_embedding.reshape(1, -1), device=device)
+# protein_finger = protein_finger1.repeat(50, 1)
+
+protein_finger = (protein_sequence,) * 50
 
 reference_sample_flattened = reference_sample.reshape(1, -1)
 reference_sample = reference_sample.reshape(-1, 256, 128).repeat(50, 1, 1)
@@ -351,7 +353,7 @@ for decode in decoded_smiles:
 best5 = sample[select_best_smiles(smiles_list), :, :]
 num_generations = 20
 time = torch.tensor([num_advance], device=device).repeat(per_new, 1)
-protein_finger = protein_finger1.repeat(per_new, 1)
+protein_finger = (protein_sequence,) * per_new
 for generation in range(num_generations):
     all_samples = None
     all_smiles = []

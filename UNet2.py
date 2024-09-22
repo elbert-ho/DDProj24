@@ -255,7 +255,11 @@ class AttentionBlock(nn.Module):
         # print("le shape", x.shape, self.channels, encoder_out.shape)
         b, c, *spatial = x.shape
         qkv = self.qkv(self.norm(x).view(b, c, -1))
-        encoder_out = encoder_out.unsqueeze(2)
+
+        # uncomment this if not using the transformer
+        # encoder_out = encoder_out.unsqueeze(2)
+
+    
         # print(encoder_out.shape)
         if encoder_out is not None:
             encoder_out = self.encoder_kv(encoder_out)
@@ -377,7 +381,7 @@ class UNetModel(nn.Module):
         self.num_head_channels = num_head_channels
         self.num_heads_upsample = num_heads_upsample
 
-        time_embed_dim = 3
+        time_embed_dim = 1024
         # time_embed_dim = 1280
 
         self.time_embed = nn.Sequential(

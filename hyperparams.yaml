@@ -20,13 +20,13 @@ mol_model:
   
 protein_model:
   # protein_embedding_dim: 1280
-  protein_embedding_dim: 3
+  protein_embedding_dim: 160
 
 
 diffusion_model:
   epochs: 100
   batch_size: 32
-  lr: 1.0e-4
+  lr: 1.0e-5
   num_diffusion_steps: 1000
   patience: 100
   lambda_vlb: .001

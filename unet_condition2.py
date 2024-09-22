@@ -36,7 +36,7 @@ class Text2ImUNet(UNetModel):
         share_unemb=False,
         **kwargs,
     ):
-        self.text_ctx = text_ctx
+        # self.text_ctx = text_ctx
         self.xf_width = xf_width
         self.xf_ar = xf_ar
         self.xf_padding = xf_padding
@@ -74,9 +74,17 @@ class Text2ImUNet(UNetModel):
 
         # Load ESM configuration for the specific model version you want
         config = EsmConfig.from_pretrained("facebook/esm2_t6_8M_UR50D")
+        config.num_attention_heads = 5
+        config.hidden_size = 160
+        config.intermediate_size = 640
+        config.num_hidden_layers = 2
+        # print(config)
+        # exit()
+
+
         self.tokenizer = EsmTokenizer.from_pretrained("facebook/esm2_t6_8M_UR50D")
         # Create the model using the architecture but with random weights (no pre-trained weights)
-        self.esm_model = EsmModel(config)
+        self.esm_model = EsmModel(config).to('cuda')
 
         self.cache_text_emb = cache_text_emb
         self.cache = None
@@ -93,10 +101,22 @@ class Text2ImUNet(UNetModel):
             if self.xf_ar:
                 self.unemb.to(th.float16)
 
-    def get_text_emb(self, protein_string, mask):
-        assert protein_string is not None
+    def get_text_emb(self, protein_string):
 
-        xf_in = self.tokenizer(protein_string, return_tensors="pt", padding=True, truncation=True)
+        
+        if protein_string[0] == "":
+            xf_out = th.zeros([len(protein_string), 1024, 160], device="cuda")
+            xf_proj = self.transformer_proj(xf_out[:, -1])
+            xf_out = xf_out.permute(0, 2, 1)
+            outputs = dict(xf_proj=xf_proj, xf_out=xf_out)
+            return outputs
+        
+        # print(protein_string)
+
+        xf_in = self.tokenizer(protein_string, return_tensors="pt", padding=True, truncation=True).to('cuda')
+
+        # print(th.cuda.mem_get_info())
+
         xf_out = self.esm_model(input_ids=xf_in["input_ids"], attention_mask=xf_in["attention_mask"]).last_hidden_state
         xf_proj = self.transformer_proj(xf_out[:, -1])
         xf_out = xf_out.permute(0, 2, 1)  # NLC -> NCL
@@ -107,7 +127,9 @@ class Text2ImUNet(UNetModel):
     def del_cache(self):
         self.cache = None
 
-    def forward(self, x, timesteps, xf_proj):
+        
+
+    def forward(self, x, timesteps, protein_string):
         hs = []
         # print(x.shape)
         # exit()
@@ -118,12 +140,25 @@ class Text2ImUNet(UNetModel):
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         # print(emb.shape)
         # print(xf_proj.shape)
-        xf_proj = xf_proj.squeeze(1)
+        # xf_proj = xf_proj.squeeze(1)
+        th.cuda.empty_cache()
 
-        if self.xf_width:
-            emb = emb + xf_proj.to(emb)
-        else:
-            xf_out = None
+        # a = th.cuda.memory_allocated(0) / 10e9
+        # r = th.cuda.memory_reserved(0) / 10e9
+        # print(f"Mem before {(r - a) / 10e9}")
+        # print(th.cuda.mem_get_info())
+
+        protein_outputs = self.get_text_emb(protein_string)
+
+        # a = th.cuda.memory_allocated(0) / 10e9
+        # r = th.cuda.memory_reserved(0) / 10e9
+        # print(f"Mem after {(r - a) / 10e9}")
+        # print(th.cuda.mem_get_info())
+
+        xf_proj, xf_out = protein_outputs["xf_proj"], protein_outputs["xf_out"]
+
+        emb = emb + xf_proj.to(emb)
+
         h = x.type(self.dtype)
         # print(emb.shape)
         # exit()
@@ -139,14 +174,14 @@ class Text2ImUNet(UNetModel):
             # print(xf_proj.shape)
             # print(emb.shape)
             # exit()
-            h = module(h, emb, xf_proj)
+            h = module(h, emb, xf_out)
             hs.append(h)
             # print(h.shape)
         
-        h = self.middle_block(h, emb, xf_proj)
+        h = self.middle_block(h, emb, xf_out)
         for module in self.output_blocks:
             h = th.cat([h, hs.pop()], dim=1)
-            h = module(h, emb, xf_proj)
+            h = module(h, emb, xf_out)
         h = h.type(x.dtype)
         h = self.out(h)
         return h

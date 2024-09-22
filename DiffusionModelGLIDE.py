@@ -169,7 +169,11 @@ class GaussianDiffusion:
 
         CFG = (w != -1)
         if CFG:
-            model_output_cfg = model(x, t, torch.zeros_like(prot))
+            # uncomment if doing not transformer thingy
+            # model_output_cfg = model(x, t, torch.zeros_like(prot))
+            
+            model_output_cfg = model(x, t, ("",) * len(prot))
+
             assert model_output_cfg.shape == (B, C * 2, *x.shape[2:])
             model_output_cfg, _ = torch.split(model_output_cfg, C, dim=1)
             model_output = (1 + w) * model_output - w * model_output_cfg
@@ -560,7 +564,11 @@ class GaussianDiffusion:
         # it affect our mean prediction.
         frozen_out = torch.cat([model_output.detach(), model_var_values], dim=1)
         if(debug):
-            print(f"t: {t}, output: {torch.sum(model_output)}")
+            print(f"output: {torch.sum(model_output)}")
+            for idx, output in enumerate(model_output):
+                print(f"IDX: {idx} T: {t[idx]} PROT: {prot[idx]}")
+            if(torch.isnan(torch.sum(model_output))):
+                exit()
 
         terms["vb"] = self._vb_terms_bpd(
             model=lambda *args, r=frozen_out: r,
