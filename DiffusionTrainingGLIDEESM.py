@@ -89,7 +89,7 @@ if(os.path.isfile(checkpoint_name)):
 else:
     loaded_epochs = 0
 
-epochs = 5
+epochs = 495
 for epoch in range(epochs):
     print(f"EPOCH {epoch + 1} BEGIN")
     
@@ -196,7 +196,11 @@ for epoch in range(epochs):
     average_train_loss = epoch_loss / len(train_loader)
     average_train_mse_loss = train_mse_loss / len(train_loader)
     average_train_vb_loss = train_vb_loss / len(train_loader)
-    print(f"Epoch [{epoch + 1}/{epochs}], Average Training Loss: {average_train_loss:.4f}, Average MSE Loss: {average_train_mse_loss}, Average VB Loss: {average_train_vb_loss}")
+    log = f"Epoch [{epoch + 1}/{epochs}], Average Training Loss: {average_train_loss:.4f}, Average MSE Loss: {average_train_mse_loss}, Average VB Loss: {average_train_vb_loss}"
+    print(log)
+    f = open("log_file.txt", "a")
+    f.write(log)
+    f.close()
 
     # Early stopping
     # if average_val_loss < best_val_loss:
@@ -217,3 +221,4 @@ for epoch in range(epochs):
 
         dict = {'epochs': epoch + loaded_epochs, 'state_dict': unet.state_dict(), 'optimizer': optimizer.state_dict(), 'scaler': scaler.state_dict()}
         torch.save(dict, name)
+
