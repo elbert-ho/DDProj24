@@ -1,11 +1,11 @@
 import torch
-from DiffusionModelGLIDE import *
+from DiffusionModelGLIDE3 import *
 import yaml
 import torch.optim as optim
 from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
-from unet_condition2 import Text2ImUNet
-from ProtLigDataset2 import ProtLigDataset
+from unet_condition3 import Text2ImUNet
+from ProtLigDataset3 import ProtLigDataset
 from MolPropModel import PropertyModel
 from transformers import EsmTokenizer, EsmModel
 from tokenizers import Tokenizer
@@ -97,7 +97,11 @@ time_embed_dim = config["pIC50_model"]["time_embed_dim"]
 diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(n_diff_step))
 unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
 unet.to(device)
-unet.load_state_dict(torch.load('unet_resized_odd.pt', map_location=device))
+# unet.load_state_dict(torch.load('unet_resized_odd.pt', map_location=device))
+checkpoint = torch.load('checkpoint.pt', map_location=device)
+
+unet.load_state_dict(checkpoint["state_dict"])
+
 unet.eval()
 
 # if False:
@@ -122,15 +126,18 @@ unet.eval()
     # protein_embedding = torch.tensor(np.load("data/protein_embeddings.npy")[0], device=device).reshape(1, -1)
     # protein_embedding = torch.tensor(np.load("data/protein_embeddings3.npy")[9653], device=device).reshape(1, -1)
 
-proteins = pd.read_csv("data/protein_drug_pairs_with_sequences_and_smiles_cleaned.csv")["Protein Sequence"].to_list()
-protein_embedding = (proteins[0],)
+# proteins = pd.read_csv("data/protein_drug_pairs_with_sequences_and_smiles_cleaned.csv")["Protein Sequence"].to_list()
+# protein_embedding = (proteins[0],)
+
+protein_ids = torch.tensor(np.load("data/input_ids2.npy")[0], dtype=torch.int32).reshape(1, -1).to(device)
+protein_atts = torch.tensor(np.load("data/attention_masks2.npy")[0], dtype=torch.int32).reshape(1, -1).to(device)
 
 # print(protein_embedding.shape)
 
 # cond_fn = get_balanced_grad()
 
 # sample = diffusion_model.p_sample_loop(unet, (1, 1, input_size), prot=protein_embedding, cond_fn=get_balanced_grad)
-sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_embedding, w=0).reshape(input_size)
+sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_ids, attn=protein_atts, w=3).reshape(input_size)
 # sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_embedding, cond_fn=get_pIC50_grad).reshape(input_size)
 
 # sample = diffusion_model.ddim_sample_loop(unet, (1, 1, input_size), prot=protein_embedding)

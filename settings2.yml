@@ -1,0 +1,22 @@
+data:
+  batch_size: 32
+  smiles_file: data/merged_smiles_no_dots.csv
+  # smiles_file: data/0SelectedSMILES_QM9.csv
+  type_of_encoding: 1
+
+decoder:
+  latent_dimension: 256
+  gru_neurons_num: 512
+  gru_stack_size: 1
+
+encoder:
+  layer_1d: 1024
+  layer_2d: 1024
+  layer_3d: 1024
+  latent_dimension: 256
+
+training:
+  lr_enc: .0002
+  lr_dec: .0002
+  num_epochs: 5000
+  sample_num: 250

@@ -110,6 +110,7 @@ for epoch in range(epochs):
             if(torch.randint(0, 5, (1,))[0] == 0):
                 prot = ("",) * len(prot)
 
+            prot = list(prot)
             t = torch.randint(0, n_diff_step, [b,] ,device=device)
             # t = torch.tensor([1], device=device).repeat(b)
             loss_dict = diffusion_model.training_losses(unet, mol, t, prot=prot)
@@ -158,6 +159,8 @@ for epoch in range(epochs):
                     # print(f"SUM VB LOSS  {loss_vlb_max}")
                 # else:
                     # loss_dict = diffusion_model.training_losses(unet, mol, t, prot=prot)
+
+                prot = list(prot)
                 loss_dict = diffusion_model.training_losses(unet, mol, t, prot=prot)
                 loss = torch.mean(loss_dict["loss"])
                 loss_mse = torch.mean(loss_dict["mse"])

@@ -3,8 +3,8 @@ mol_model:
   num_heads: 8
   num_layers: 2
   d_ff: 2048
-  src_vocab_size: 79
-  tgt_vocab_size: 79
+  src_vocab_size: 256
+  tgt_vocab_size: 256
   max_seq_length: 128
   num_tasks: 5
   dropout: .1
@@ -14,9 +14,9 @@ mol_model:
   warmup_epochs: 10
   total_epochs: 200
   patience: 7
-  pretrain_epochs: 10
+  pretrain_epochs: 20
   pretrain_learning_rate: 1.0e-4
-  tokenizer_file: "models/smiles_tokenizer_10K_full.json"
+  # tokenizer_file: "models/smiles_tokenizer_10K_full.json"
   
 protein_model:
   # protein_embedding_dim: 1280

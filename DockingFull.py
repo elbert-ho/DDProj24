@@ -8,7 +8,7 @@ env_name = "unidock_env"
 
 # Parameters
 # ws = [0, 0.5, 5, 10, 50, 100, 200]
-ws = [5]
+ws = [0]
 for w in ws:
 # w = 0
     num_proteins = 100
@@ -17,10 +17,17 @@ for w in ws:
     # cy = 24.996
     # cz = 241.266
 
-    protein_file = "9ayh.pdbqt"
-    cx = 139.842
-    cy = 124.090
-    cz = 148.222
+    # protein_file = "9ayh.pdbqt"
+    # cx = 139.842
+    # cy = 124.090
+    # cz = 148.222
+
+    # 7tiu - 5.841, 0.916, 21.988
+    protein_file = "7tiu.pdbqt"
+    cx = 5.841
+    cy = 0.916
+    cz = 21.988
+
 
     # Assuming output is 21 for testing purposes
     # output = 20
@@ -31,7 +38,7 @@ for w in ws:
     delete_sdf_files("ligands_cl3_filtered")
 
     result = subprocess.run(
-        ["python", "DockingTest.py", "--w", str(w), "--num_proteins", str(num_proteins)], 
+        ["python", "DockingTest3.py", "--w", str(w), "--num_proteins", str(num_proteins)], 
         text=True
     )
 

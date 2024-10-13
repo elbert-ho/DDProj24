@@ -97,7 +97,10 @@ time_embed_dim = config["pIC50_model"]["time_embed_dim"]
 diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(n_diff_step))
 unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
 unet.to(device)
-unet.load_state_dict(torch.load('unet_resized_even.pt', map_location=device))
+
+checkpoint = torch.load('checkpoint.pt', map_location=device)
+
+unet.load_state_dict(checkpoint["state_dict"])
 unet.eval()
 
 if False:

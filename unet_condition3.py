@@ -137,7 +137,7 @@ class Text2ImUNet(UNetModel):
         # print(emb.shape)
         # print(xf_proj.shape)
         # xf_proj = xf_proj.squeeze(1)
-        th.cuda.empty_cache()
+        # th.cuda.empty_cache()
 
         # a = th.cuda.memory_allocated(0) / 10e9
         # r = th.cuda.memory_reserved(0) / 10e9

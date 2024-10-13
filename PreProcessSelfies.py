@@ -15,10 +15,9 @@ import sascorer
 from MolTransformerSelfies import MultiTaskTransformer
 import yaml
 import selfies as sf
-from SelfiesTok import SelfiesTok
 # Suppress warnings
 RDLogger.DisableLog('rdApp.*')
-ESM = True
+ESM = False
 smiles_only = True
 save_smiles = False
 
@@ -35,8 +34,10 @@ if ESM:
 with open("hyperparams.yaml", "r") as file:
     config = yaml.safe_load(file)
 
-# df = pd.read_csv('data/protein_drug_pairs_with_sequences_and_smiles_cleaned.csv')
-df = pd.read_csv('data/protein_drug_pairs_with_sequences_and_smiles_cleaned2.csv')
+file_path = "data/pd_truncated_final_1.csv"
+df = pd.read_csv(file_path)
+dataset = SMILESDataset(file_path, tokenizer_path="models/selfies_tokenizer_final.json", unicode_path="models/unicode_mapping.json")
+# df = pd.read_csv('data/protein_drug_pairs_with_sequences_and_smiles_cleaned2.csv')
 src_vocab_size = config["mol_model"]["src_vocab_size"]
 tgt_vocab_size = config["mol_model"]["tgt_vocab_size"]
 max_seq_length = config["mol_model"]["max_seq_length"]
@@ -58,10 +59,10 @@ tok_file = config["mol_model"]["tokenizer_file"]
 
 if save_smiles:
     smiles_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks)
-    smiles_model.load_state_dict(torch.load('models/selfies_transformer_final.pt'))
+    smiles_model.load_state_dict(torch.load('models/selfies_transformer_final_bpe.pt'))
     # Ensure the model is on the correct device
     smiles_model.to(device)
-    tokenizer = SelfiesTok.load("models/selfies_tok.json")
+    # tokenizer = SelfiesTok.load("models/selfies_tok.json")
     # Initialize the dataset and dataloaders
     smiles_model.eval()
 

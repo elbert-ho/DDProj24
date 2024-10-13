@@ -182,8 +182,8 @@ class MultiTaskTransformer(nn.Module):
 
     def decode_representation(self, enc_output, fingerprint, max_length, tokenizer):
         batch_size = enc_output.size(0)
-        decoded_sequence = torch.full((batch_size, 1), tokenizer.token_to_id["[CLS]"], dtype=torch.long, device=enc_output.device)
-        eos_token_id = tokenizer.token_to_id["[EOS]"]
+        decoded_sequence = torch.full((batch_size, 1), tokenizer.token_to_id("[CLS]"), dtype=torch.long, device=enc_output.device)
+        eos_token_id = tokenizer.token_to_id("[EOS]")
 
         finished = torch.zeros(batch_size, dtype=torch.bool, device=enc_output.device)
 
@@ -210,7 +210,7 @@ class MultiTaskTransformer(nn.Module):
         for i in range(decoded_sequence.size(0)):
             eos_index = (decoded_sequence[i] == eos_token_id).nonzero(as_tuple=True)[0]
             if eos_index.numel() > 0:
-                decoded_sequence[i, eos_index[0]+1:] = tokenizer.token_to_id["[PAD]"]
+                decoded_sequence[i, eos_index[0]+1:] = tokenizer.token_to_id("[PAD]")
 
         task_outputs = None
         if fingerprint is not None:

@@ -69,6 +69,13 @@ class GaussianDiffusion:
             (1.0 - self.alphas_cumprod_prev) * np.sqrt(alphas) / (1.0 - self.alphas_cumprod)
         )
 
+        device='cuda'
+        self.empty_ids = torch.zeros([1026], device=device)
+        self.empty_ids[0] = 1
+        self.empty_ids[1] = 1
+        self.empty_attn = torch.ones([1026], device=device)
+
+
     def q_mean_variance(self, x_start, t):
         """
         Get the distribution q(x_t | x_0).
@@ -170,9 +177,8 @@ class GaussianDiffusion:
         CFG = (w != -1)
         if CFG:
             # uncomment if doing not transformer thingy
-            # model_output_cfg = model(x, t, torch.zeros_like(prot))
-            
-            model_output_cfg = model(x, t, ("",) * len(prot))
+            # model_output_cfg = model(x, t, torch.zeros_like(prot))            
+            model_output_cfg = model(x, t, None)
 
             assert model_output_cfg.shape == (B, C * 2, *x.shape[2:])
             model_output_cfg, _ = torch.split(model_output_cfg, C, dim=1)

@@ -7,7 +7,7 @@ from tqdm import tqdm
 import numpy as np
 from tokenizers import Tokenizer
 import yaml
-from MolLoaderSelfies import SMILESDataset
+from MolLoaderSelfiesFinal import SMILESDataset
 from MolTransformerSelfies import MultiTaskTransformer
 import optuna
 import selfies as sf
@@ -313,9 +313,14 @@ def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_r
     # tok_file = config["mol_model"]["tokenizer_file"]
 
     # Initialize the dataset and dataloaders
-    file_path = "data/smiles_10000_selected_features_cleaned.csv"
+    # file_path = "data/smiles_10000_selected_features_cleaned.csv"
+    file_path = "data/smiles_cleaned_final.csv"  # New file to save filtered data
+
     # smiles_tokenizer = Tokenizer.from_file(tok_file)
-    dataset = SMILESDataset(file_path, vocab_size=79, max_length=128, tokenizer_path="models/selfies_tok.json")
+    # dataset = SMILESDataset(file_path, vocab_size=79, max_length=128, tokenizer_path="models/selfies_tok.json")
+    # dataset = SMILESDataset(file_path, vocab_size=256, max_length=128, tokenizer_path="models/selfies_tokenizer_final.json")
+    dataset = SMILESDataset(file_path, tokenizer_path="models/selfies_tokenizer_final.json", unicode_path="models/unicode_mapping.json")
+
     normalization_factors = compute_normalization_factors(dataset)
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
@@ -330,7 +335,7 @@ def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_r
 
     # Initialize the model, loss function, and optimizer
     model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks).to(device)
-    criterion_reconstruction = nn.CrossEntropyLoss(ignore_index=dataset.tokenizer.token_to_id["[PAD]"])
+    criterion_reconstruction = nn.CrossEntropyLoss(ignore_index=dataset.tokenizer.token_to_id("[PAD]"))
     criterion_tasks = nn.MSELoss()
     
     # model.load_state_dict(torch.load('models/selfies_transformer.pt', map_location=device))
@@ -371,7 +376,7 @@ def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_r
                 best_val_loss = val_loss
                 epochs_no_improve = 0
                 # Save the best model
-                torch.save(model.state_dict(), 'models/selfies_transformer_final.pt')
+                torch.save(model.state_dict(), 'models/selfies_transformer_final_bpe.pt')
             else:
                 epochs_no_improve += 1
 

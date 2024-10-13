@@ -9,9 +9,9 @@ import pandas as pd
 import yaml
 from tokenizers import Tokenizer
 from MolTransformerSelfies import MultiTaskTransformer
-from MolLoaderSelfies import SMILESDataset
+from MolLoaderSelfiesFinal import SMILESDataset
 
-def evaluate_model(model, val_loader, tokenizer, max_length, device):
+def evaluate_model(model, val_loader, tokenizer, dataset, max_length, device):
     model.eval()
     original_sequences = []
     predicted_sequences = []
@@ -24,7 +24,7 @@ def evaluate_model(model, val_loader, tokenizer, max_length, device):
 
     with torch.no_grad():
         for batch_num, batch in enumerate(tqdm(val_loader, desc="Evaluating")):
-            if(batch_num == 16):
+            if(batch_num == 32):
                 break
             src, task_targets = batch
             src = src.to(device)
@@ -48,8 +48,10 @@ def evaluate_model(model, val_loader, tokenizer, max_length, device):
                 predicted_seq = decoded_sequences[j, :]
 
                 # Convert token ids back to SMILES strings
-                original_smiles = tokenizer.decode(original_seq.tolist(), skip_special_tokens=True)
-                predicted_smiles = tokenizer.decode(predicted_seq.tolist(), skip_special_tokens=True)
+                original_smiles = dataset.decode(original_seq.tolist())
+                predicted_smiles = dataset.decode(predicted_seq.tolist())
+                # original_smiles = tokenizer.decode(original_seq.tolist(), skip_special_tokens=True)
+                # predicted_smiles = tokenizer.decode(predicted_seq.tolist(), skip_special_tokens=True)
 
                 original_sequences.append(original_smiles)
                 predicted_sequences.append(predicted_smiles)
@@ -61,9 +63,9 @@ def evaluate_model(model, val_loader, tokenizer, max_length, device):
                 # Calculate correct symbols
                 flag_correct = True
                 for orig_token, pred_token in zip(original_seq, predicted_seq):
-                    if orig_token == tokenizer.token_to_id["[EOS]"]:
+                    if orig_token == tokenizer.token_to_id("[EOS]"):
                         break
-                    if orig_token != tokenizer.token_to_id["[PAD]"]:
+                    if orig_token != tokenizer.token_to_id("[PAD]"):
                         total_symbols += 1
                         if orig_token == pred_token:
                             correct_symbols += 1
@@ -123,17 +125,16 @@ total_epochs = config["mol_model"]["total_epochs"]
 patience = config["mol_model"]["patience"]
 pretrain_epochs = config["mol_model"]["pretrain_epochs"]
 pretrain_learning_rate = config["mol_model"]["pretrain_learning_rate"]
-tok_file = config["mol_model"]["tokenizer_file"]
 
 model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks)
-model.load_state_dict(torch.load('models/selfies_transformer_final.pt'))
+model.load_state_dict(torch.load('models/selfies_transformer_final_bpe.pt'))
 
 # Ensure the model is on the correct device
 model.to(device)
 
 # Initialize the dataset and dataloaders
-file_path = "data/smiles_10000_selected_features_cleaned.csv"
-dataset = SMILESDataset(file_path, vocab_size=1000, max_length=128, tokenizer_path="models/selfies_tok.json")
+file_path = "data/smiles_cleaned_final.csv"
+dataset = SMILESDataset(file_path, vocab_size=256, max_length=128, tokenizer_path="models/selfies_tokenizer_final.json", unicode_path="models/unicode_mapping.json")
 
 train_size = int(0.8 * len(dataset))
 val_size = len(dataset) - train_size
@@ -143,4 +144,4 @@ train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 # Evaluate model on the validation set
-evaluate_model(model, val_loader, dataset.tokenizer, max_seq_length, device)
+evaluate_model(model, val_loader, dataset.tokenizer, dataset, max_seq_length, device)

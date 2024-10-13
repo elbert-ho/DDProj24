@@ -28,6 +28,8 @@ class ProtLigDataset(Dataset):
 
         self.ids = torch.tensor(self.ids, dtype=torch.int32)
         self.atts = torch.tensor(self.atts, dtype=torch.int32)
+
+        # JUST CHANGE THIS LINE
         self.smiles_data = torch.tensor(self.smiles_data, dtype=torch.float32).reshape(-1, 256, 128)
 
 

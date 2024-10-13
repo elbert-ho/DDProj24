@@ -7,3 +7,11 @@ ligands_cl3_output/ligand005.sdf
 ligands_cl3_output/ligand006.sdf
 ligands_cl3_output/ligand007.sdf
 ligands_cl3_output/ligand008.sdf
+ligands_cl3_output/ligand009.sdf
+ligands_cl3_output/ligand010.sdf
+ligands_cl3_output/ligand011.sdf
+ligands_cl3_output/ligand012.sdf
+ligands_cl3_output/ligand013.sdf
+ligands_cl3_output/ligand014.sdf
+ligands_cl3_output/ligand015.sdf
+ligands_cl3_output/ligand016.sdf
