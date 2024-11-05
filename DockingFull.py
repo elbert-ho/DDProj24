@@ -8,9 +8,10 @@ env_name = "unidock_env"
 
 # Parameters
 # ws = [0, 0.5, 5, 10, 50, 100, 200]
-ws = [0]
+ws = [5]
 for w in ws:
 # w = 0
+    # print(f"W: {w}")
     num_proteins = 100
     # protein_file = "5f1a.pdbqt"
     # cx = 40.544
@@ -73,13 +74,18 @@ for w in ws:
         shell=True, check=True
     )
 
+
     # Run the command again without piping within WSL
-    subprocess.run(f"wsl bash -c \"{pipeline_command_str} > /dev/null 2>&1\"", shell=True, check=True)
+    # subprocess.run(f"wsl bash -c \"{pipeline_command_str} > /dev/null 2>&1\"", shell=True, check=True)
+
+    # Run the command again without piping within WSL
+    subprocess.run(f"wsl bash -c \"{pipeline_command_str}\"", shell=True, check=True)
 
     # Print benchmark
     subprocess.run(["python", "DockingPrintBench.py"])
 
     print("-----------------------------------")
+    exit()
 
     # Re-run the same steps with the updated output
     num_proteins = output

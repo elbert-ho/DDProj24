@@ -152,9 +152,9 @@ class SMILESDataset(Dataset):
                 # Encode the SELFIES sequence
                 encoded_ids = self.encode(selfies_sequence)
                 break
-            except KeyError:
-                failed = True
-                break
+            # except KeyError:
+                # failed = True
+                # break
             except Exception:
                 continue
         

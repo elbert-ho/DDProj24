@@ -33,6 +33,8 @@ from collections import Counter
 import selfies as sf
 from pIC50Predictor2 import pIC50Predictor
 import argparse
+from Normalizer import Normalizer
+from MolLoaderSelfiesFinal import SMILESDataset
 
 parser = argparse.ArgumentParser(description="Generate molecules with specified protein and parameters.")
 # parser.add_argument("--protein", type=str, default="MASWSHPQFEKGGGARGGSGGGSWSHPQFEKGFDYKDDDDKGTMTEGARAADEVRVPLGAPPPGPAALVGASPESPGAPGREAERGSELGVSPSESPAAERGAELGADEEQRVPYPALAATVFFCLGQTTRPRSWCLRLVCNPWFEHVSMLVIMLNCVTLGMFRPCEDVECGSERCNILEAFDAFIFAFFAVEMVIKMVALGLFGQKCYLGDTWNRLDFFIVVAGMMEYSLDGHNVSLSAIRTVRVLRPLRAINRVPSMRILVTLLLDTLPMLGNVLLLCFFVFFIFGIVGVQLWAGLLRNRCFLDSAFVRNNNLTFLRPYYQTEEGEENPFICSSRRDNGMQKCSHIPGRRELRMPCTLGWEAYTQPQAEGVGAARNACINWNQYYNVCRSGDSNPHNGAINFDNIGYAWIAIFQVITLEGWVDIMYYVMDAHSFYNFIYFILLIIVGSFFMINLCLVVIATQFSETKQRESQLMREQRARHLSNDSTLASFSEPGSCYEELLKYVGHIFRKVKRRSLRLYARWQSRWRKKVDPGWMGRLWVTFSGKLRRIVDSKYFSRGIMMAILVNTLSMGVEYHEQPEELTNALEISNIVFTSMFALEMLLKLLACGPLGYIRNPYNIFDGIIVVISVWEIVGQADGGLSVLRTFRLLRVLKLVRFLPALRRQLVVLVKTMDNVATFCTLLMLFIFIFSILGMHLFGCKFSLKTDTGDTVPDRKNFDSLLWAIVTVFQILTQEDWNVVLYNGMASTSSWAALYFVALMTFGNYVLFNLLVAILVEGFQAEGDANRSDTDEDKTSVHFEEDFHKLRELQTTELKMCSLAVTPNGHLEGRGSLSPPLIMCTAATPMPTPKSSPFLDAAPSLPDSRRGSSSSGDPPLGDQKPPASLRSSPCAPWGPSGAWSSRRSSWSSLGRAPSLKRRGQCGERESLLSGEGKGSTDDEAEDGRAAPGPRATPLRRAESLDPRPLRPAALPPTKCRDRDGQVVALPSDFFLRIDSHREDAAELDDDSEDSCCLRLHKVLEPYKPQWCRSREAWALYLFSPQNRFRVSCQKVITHKMFDHVVLVFIFLNCVTIALERPDIDPGSTERVFLSVSNYIFTAIFVAEMMVKVVALGLLSGEHAYLQSSWNLLDGLLVLVSLVDIVVAMASAGGAKILGVLRVLRLLRTLRPLRVISRAPGLKLVVETLISSLRPIGNIVLICCAFFIIFGILGVQLFKGKFYYCEGPDTRNISTKAQCRAAHYRWVRRKYNFDNLGQALMSLFVLSSKDGWVNIMYDGLDAVGVDQQPVQNHNPWMLLYFISFLLIVSFFVLNMFVGVVVENFHKCRQHQEAEEARRREEKRLRRLERRRRSTFPSPEAQRRPYYADYSPTRRSIHSLCTSHYLDLFITFIICVNVITMSMEHYNQPKSLDEALKYCNYVFTIVFVFEAALKLVAFGFRRFFKDRWNQLDLAIVLLSLMGITLEEIEMSAALPINPTIIRIMRVLRIARVLKLLKMATGMRALLDTVVQALPQVGNLGLLFMLLFFIYAALGVELFGRLECSEDNPCEGLSRHATFSNFGMAFLTLFRVSTGDNWNGIMKDTLRECSREDKHCLSYLPALSPVYFVTFVLVAQFVLVNVVVAVLMKHLEESNKEAREDAELDAEIELEMAQGPGSARRVDADRPPLPQESPGARDAPNLVARKVSVSRMLSLPNDSYMFRPVVPASAPHPRPLQEVEMETYGAGTPLGSVASVHSPPAESCASLQIPLAVSSPARSGEPLHALSPRGTARSPSLSRLLCRQEAVHTDSLEGKIDSPRDTLDPAEPGEKTPVRPVTQGGSLQSPPRSPRPASVRTRKHTFGQRCVSSRPAAPGGEEAEASDPADEEVSHITSSACPWQPTAEPHGPEASPVAGGERDLRRLYSVDAQGFLDKPGRADEQWRPSAELGSGEPGEAKAWGPEAEPALGARRKKKMSPPCISVEPPAEDEGSARPSAAEGGSTTLRRRTPSCEATPHRDSLEPTEGSGAGGDPAAKGERWGQASCRAEHLTVPSFAFEPLDLGVPSGDPFLDGSHSVTPESRASSSGAIVPLEPPESEPPMPVGDPPEKRRGLYLTVPQCPLEKPGSPSATPAPGGGADDPV", help="Protein sequence to be used")
@@ -75,9 +77,10 @@ unet.load_state_dict(checkpoint["state_dict"])
 
 # exit()
 
-mol_model.load_state_dict(torch.load('models/selfies_transformer_final.pt', map_location=device))
+mol_model.load_state_dict(torch.load('models/selfies_transformer_final_bpe.pt', map_location=device))
 
 unet, mol_model = unet.to(device), mol_model.to(device)
+dataset = SMILESDataset("data/pd_truncated_final_1.csv", tokenizer_path="models/selfies_tokenizer_final.json", unicode_path="models/unicode_mapping.json", props=False)
 
 # Step 0.3: Pick 40 random proteins and generate 25 molecules per protein
 # Group by Protein Sequence and filter groups that have at least 25 SMILES strings
@@ -142,32 +145,45 @@ protein_atts_repeat = protein_atts.repeat(args.num_proteins, 1).to("cuda")
 
 sample = diffusion_model.p_sample_loop(unet, (args.num_proteins, 256, 128), prot=protein_ids_repeat, attn=protein_atts_repeat, w=args.w).detach().reshape(args.num_proteins, 1, 32768)
 
+normalizer = Normalizer()
+
 # Step 0.3.2: Remember to unnormalize
-mins = torch.tensor(np.load("data/smiles_mins_selfies.npy"), device=device).reshape(1, 1, -1)
-maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy"), device=device).reshape(1, 1, -1)
-sample_rescale = (((sample + 1) / 2) * (maxes - mins) + mins)
+# mins = torch.tensor(np.load("data/smiles_mins_selfies.npy"), device=device).reshape(1, 1, -1)
+# maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy"), device=device).reshape(1, 1, -1)
+# sample_rescale = (((sample + 1) / 2) * (maxes - mins) + mins)
 # print(sample_rescale.shape)
 
+sample_rescale = torch.tensor(normalizer.denormalize(sample.cpu().numpy()), device=device)
+
 # Step 0.3.3: Convert from SELFIES back to SMILES
-tokenizer = SelfiesTok.load("models/selfies_tok.json")
+
+
 with torch.no_grad():
-    decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
+    decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=dataset.tokenizer)
 
 gen_smiles = []
 gen_smiles_filtered = []
 qeds = []
 sass = []
 
+idx = 0
 for decode in decoded_smiles:
-    predicted_selfie = tokenizer.decode(decode.detach().cpu().flatten().tolist(), skip_special_tokens=True)
+    predicted_selfie = dataset.decode(decode.detach().cpu().flatten().tolist())
     predicted_smile = sf.decoder(predicted_selfie)
-    
+
     try:
         mol = Chem.MolFromSmiles(predicted_smile)
         # mol = Chem.AddHs(mol)
         # Filter for QED at least 0.5, SAS below 5
         qed = QED.qed(mol)
         sas = sascorer.calculateScore(mol)
+
+        qeds.append(qed)
+        sass.append(sas)
+
+        print(f"Molecule {idx}: {predicted_smile} QED {qed} SAS {sas}")
+
+
         if qed >= .4 and sas <= 6:
             # print(f"added qed: {qed} sas: {sas}")
             # qeds.append(qed)
@@ -177,9 +193,10 @@ for decode in decoded_smiles:
         pass
 
     gen_smiles.append(predicted_smile)
+    idx += 1
 
-# print(sum(qeds)/len(qeds))
-# print(sum(sass)/len(sass))
+print(f"AVERAGE QED {sum(qeds)/len(qeds)}")
+print(f"AVERAGE SAS {sum(sass)/len(sass)}")
 print(len(gen_smiles_filtered))
 
 idx = 0

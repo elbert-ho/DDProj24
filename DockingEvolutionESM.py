@@ -1,4 +1,7 @@
 # Generate 1000 molecules
+
+# maybe check w but doubtful it will do anything at all
+
 # IMPORTS
 import torch
 import yaml
@@ -24,7 +27,8 @@ import sascorer
 import selfies as sf
 import argparse
 from ESM2Regressor import ESM2Regressor
-
+from MolLoaderSelfiesFinal import SMILESDataset
+from Normalizer import  Normalizer
 
 parser = argparse.ArgumentParser(description="Generate molecules with specified protein and parameters.")
 args = parser.parse_args()
@@ -52,7 +56,7 @@ unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_h
 mol_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks).to(device)
 
 # unet.load_state_dict(torch.load('unet_resized_odd.pt', map_location=device))
-mol_model.load_state_dict(torch.load('models/selfies_transformer_final.pt', map_location=device))
+mol_model.load_state_dict(torch.load('models/selfies_transformer_final_bpe.pt', map_location=device))
 
 checkpoint = torch.load('checkpoint.pt', map_location=device)
 unet.load_state_dict(checkpoint["state_dict"])
@@ -60,27 +64,86 @@ unet.load_state_dict(checkpoint["state_dict"])
 unet, mol_model = unet.to(device), mol_model.to(device)
 
 # REFERENCE SAMPLE SHOULD BE UNNORMALIZED
+dataset = SMILESDataset("data/pd_truncated_final_1.csv", tokenizer_path="models/selfies_tokenizer_final.json", unicode_path="models/unicode_mapping.json", props=False)
+
 # reference_sample = torch.tensor(np.load("data/ref_sample.npy"), device=device).reshape(1, 1, 32768)
-reference_sample = torch.tensor(np.load("data/smiles_output_selfies_normal2.npy")[0], device=device).reshape(1, 1, 32768)
+# reference_sample = np.load("data/smiles_output_selfies_normal2.npy")[0].reshape(1, 1, 32768)
+# protein_ids = torch.tensor(np.load("data/input_ids2.npy")[0], dtype=torch.int32).reshape(1, -1).to(device)
+# protein_atts = torch.tensor(np.load("data/attention_masks2.npy")[0], dtype=torch.int32).reshape(1, -1).to(device)
+
+reference_sample = np.load("data/mol_19.npy")[0].reshape(1, 1, 32768)
+protein_ids = torch.tensor(np.load("data/mol_19_ids.npy")[0], dtype=torch.int32).reshape(1, -1).to(device)
+protein_atts = torch.tensor(np.load("data/mol_19_masks.npy")[0], dtype=torch.int32).reshape(1, -1).to(device)
 
 # reference_sample = torch.tensor(np.load("data/smiles_output_selfies_normal.npy")[9653], device=device).reshape(1, 1, 32768)
 
 # Get Reference SMILES
-mins = torch.tensor(np.load("data/smiles_mins_selfies.npy"), device=device).reshape(1, 1, -1)
-maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy"), device=device).reshape(1, 1, -1)
-reference_sample_rescale = (((reference_sample + 1) / 2) * (maxes - mins) + mins)
-# print(sample_rescale.shape)
+# global_mean = np.load("data/smiles_global_mean.npy")
+# global_std = np.load("data/smiles_global_std.npy")
+# global_min = np.load("data/smiles_global_min.npy")
+# global_max = np.load("data/smiles_global_max.npy")
+
+# print(f"dist {global_max - global_min}")
+
+# print(reference_sample[0])
+
+normalizer = Normalizer()
+
+# reference_sample_rescale = ((reference_sample + 1) / 2) 
+# print(reference_sample_rescale[0])
+# reference_sample_rescale = reference_sample_rescale * (global_max - global_min) + global_min
+# print(reference_sample_rescale[0])
+# Step 2: Undo the Z-score normalization to restore the original data
+# reference_sample_rescale = torch.tensor(reference_sample_rescale * global_std + global_mean, device=device)
+# print(reference_sample_rescale[0])
+# exit()
+
+reference_sample_rescale = torch.tensor(normalizer.denormalize(reference_sample), device=device)
+
+# print(reference_sample_rescale.dtype)
+
+# reference_sample_rescale = torch.tensor(np.load("data/smiles_output_selfies2.npy"), device=device)[0].reshape(1, 1, 32768)
+
+# print(reference_sample_rescale2.dtype)
+
+# def find_distant_elements(tensor1, tensor2, threshold):
+#     # Calculate the absolute difference between the tensors
+#     difference = torch.abs(tensor1 - tensor2)
+    
+#     # Find the indices where the difference exceeds the threshold
+#     distant_elements_indices = torch.nonzero(difference > threshold, as_tuple=True)
+    
+#     # Extract the values from tensor1 and tensor2 using the found indices
+#     tensor1_distant_values = tensor1[distant_elements_indices]
+#     tensor2_distant_values = tensor2[distant_elements_indices]
+    
+#     # Return the indices, and the values from both tensors at those indices
+#     return distant_elements_indices, tensor1_distant_values, tensor2_distant_values
+
+# indices, values1, values2 = find_distant_elements(reference_sample_rescale, reference_sample_rescale2, .1)
+# print("Indices of distant elements:", indices)
+# print("Values from tensor1 at those indices:", values1)
+# print("Values from tensor2 at those indices:", values2)
+
+
+
+# print(torch.allclose(reference_sample_rescale, reference_sample_rescale2))
 
 # Step 0.3.3: Convert from SELFIES back to SMILES
-tokenizer = SelfiesTok.load("models/selfies_tok.json")
+# tokenizer = SelfiesTok.load("models/selfies_tok.json")
 with torch.no_grad():
-    decoded_smiles, _ = mol_model.decode_representation(reference_sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
+    decoded_smiles, _ = mol_model.decode_representation(reference_sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=dataset.tokenizer)
 
-predicted_selfie = tokenizer.decode(decoded_smiles[0].detach().cpu().flatten().tolist(), skip_special_tokens=True)
+predicted_selfie = dataset.decode(decoded_smiles[0].detach().cpu().flatten().tolist())
 reference_smile = sf.decoder(predicted_selfie)
 
 reference_mol = Chem.MolFromSmiles(reference_smile)
 reference_fp = AllChem.GetMorganFingerprintAsBitVect(reference_mol, radius=2, nBits=2048)
+
+# print(predicted_selfie)
+# print(reference_smile)
+
+# exit()
 
 # model_reg = ESM2Regressor()
 # model_reg.load_state_dict(torch.load('esm2_regressor_saved.pth', map_location="cuda"))
@@ -117,8 +180,11 @@ reference_fp = AllChem.GetMorganFingerprintAsBitVect(reference_mol, radius=2, nB
 
 protein_finger = None
 
-reference_sample_flattened = reference_sample.reshape(1, -1)
-reference_sample = reference_sample.reshape(-1, 256, 128).repeat(50, 1, 1)
+num_gen = 25
+reference_sample_flattened = torch.tensor(reference_sample.reshape(1, -1), device=device)
+reference_sample = torch.tensor(reference_sample, device=device)
+reference_sample = reference_sample.reshape(-1, 256, 128).repeat(num_gen, 1, 1)
+# print(reference_sample[0])
 
 qed_lists = []
 sas_lists = []
@@ -133,10 +199,7 @@ sim_lists = []
 #     print(dict["mse"].mean())
 # exit()
 
-protein_ids = torch.tensor(np.load("data/input_ids2.npy")[0], dtype=torch.int32).reshape(1, -1).to(device)
-protein_atts = torch.tensor(np.load("data/attention_masks2.npy")[0], dtype=torch.int32).reshape(1, -1).to(device)
-
-tokenizer = EsmTokenizer.from_pretrained("facebook/esm2_t6_8M_UR50D")
+# tokenizer = EsmTokenizer.from_pretrained("facebook/esm2_t6_8M_UR50D")
 
 # df = pd.read_csv("data/protein_drug_pairs_with_sequences_and_smiles_cleaned2.csv")
 # protein_strings = df["Protein Sequence"].to_list()
@@ -146,26 +209,26 @@ tokenizer = EsmTokenizer.from_pretrained("facebook/esm2_t6_8M_UR50D")
 # protein_ids = xf_in["input_ids"]
 # protein_atts = xf_in["attention_mask"]
 
-protein_ids_repeat = protein_ids.repeat(50, 1).to("cuda")
-protein_atts_repeat = protein_atts.repeat(50, 1).to("cuda")
+protein_ids_repeat = protein_ids.repeat(num_gen, 1).to("cuda")
+protein_atts_repeat = protein_atts.repeat(num_gen, 1).to("cuda")
 
-if True:
+if False:
     # ws = [10, 20, 50]
     # for w_test in ws:
         # print(w_test)
         # step = 999
-    for step in range(999, 1000, 200):
+    for step in range(999, 1000, 100):
     # step = 999
     # for step in range(10, 101, 10):
     # for step in range(1, 11, 1):
-        time = torch.tensor([step], device=device).repeat(50, 1)
+        time = torch.tensor([step], device=device).repeat(num_gen, 1)
 
         img = diffusion_model.q_sample(reference_sample, time)
 
         # print(reference_sample[0][0])
         # print(img[0][0])
 
-        shape = (50, 256, 128)
+        shape = (num_gen, 256, 128)
         indices = list(range(step))[::-1]
         # Lazy import so that we don't depend on tqdm.
         from tqdm.auto import tqdm
@@ -180,7 +243,7 @@ if True:
                     t,
                     prot=protein_ids_repeat,
                     attn=protein_atts_repeat,
-                    w=5,
+                    w=3,
                     clip_denoised=True,
                     denoised_fn=None,
                     cond_fn=None,
@@ -196,25 +259,56 @@ if True:
 
         # for a_sample in sample:
             # print((a_sample - reference_sample_flattened).pow(2).sum().sqrt())
+        sample = sample.cpu().detach().numpy()
+        # reference_sample_np = reference_sample.reshape(1,-1).cpu().detach().numpy()
+        # sample_rescale = ((sample + 1) / 2) * (global_max - global_min) + global_min
+        # Step 2: Undo the Z-score normalization to restore the original data
+        # sample_rescale = torch.tensor(sample_rescale * global_std + global_mean, device=device)
+        
+        sample_rescale = torch.tensor(normalizer.denormalize(sample), device=device)
 
-        mins = torch.tensor(np.load("data/smiles_mins_selfies.npy"), device=device).reshape(1, 1, -1)
-        maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy"), device=device).reshape(1, 1, -1)
-        sample_rescale = (((sample + 1) / 2) * (maxes - mins) + mins)
+        # print(global_min)
+        # print(global_max)
+        # print(global_std)
+        # print(global_mean)
+        # print(sample[0])
+        # print(sample_rescale[0])
+        test_sample_flatten = sample[0].reshape(1, -1)
+
+        # print(test_sample_flatten)
+
+        # HERE
+        # print(reference_sample_flattened)
+
+        distance = torch.sqrt(torch.sum(torch.pow(torch.subtract(torch.tensor(test_sample_flatten, device=device), reference_sample_flattened), 2)) / 32768)  
+        print(distance)
+
+        # print(reference_sample_flattened)
+        # print(test_sample_flatten)
+
         # print(sample_rescale.shape)
+        # sample = torch.tensor(sample, device=device)
+        # infinity_mask = torch.isinf(sample_rescale)
+        # values_at_infinity = sample[infinity_mask]
+        # print(values_at_infinity) 
+
+        # print(torch.isinf(sample_rescale).any())
+        # exit()
 
         # Step 0.3.3: Convert from SELFIES back to SMILES
-        tokenizer = SelfiesTok.load("models/selfies_tok.json")
         with torch.no_grad():
-            decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
+            decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=dataset.tokenizer)
 
         qeds = []
         sass = []
         sims = []
         final_smiles = []
         for decode in decoded_smiles:
-            predicted_selfie = tokenizer.decode(decode.detach().cpu().flatten().tolist(), skip_special_tokens=True)
+            predicted_selfie = dataset.decode(decode.detach().cpu().flatten().tolist())
             predicted_smile = sf.decoder(predicted_selfie)
             
+            # print(predicted_selfie)
+
             try:
                 mol = Chem.MolFromSmiles(predicted_smile)
                 # mol = Chem.AddHs(mol)
@@ -292,14 +386,20 @@ if True:
     plt.savefig("images2/evoSim.png")
     exit()
 
-num_advance = 150
+# FIX THIS CODE LATER
 
-per_new = 100
+num_advance = 75
 
-time = torch.tensor([num_advance], device=device).repeat(50, 1)
+per_new = 50
+num_gen = 50
+reference_sample = reference_sample[0].reshape(1, 256, 128).repeat(num_gen, 1, 1)
+protein_ids_repeat = protein_ids[0].repeat(num_gen, 1).to("cuda")
+protein_atts_repeat = protein_atts[0].repeat(num_gen, 1).to("cuda")
+
+time = torch.tensor([num_advance], device=device).repeat(num_gen, 1)
 # Generation 0
 img = diffusion_model.q_sample(reference_sample, time)
-shape = (50, 256, 128)
+shape = (num_gen, 256, 128)
 indices = list(range(num_advance))[::-1]
 # Lazy import so that we don't depend on tqdm.
 from tqdm.auto import tqdm
@@ -311,8 +411,9 @@ for i in indices:
             unet,
             img,
             t,
-            prot=protein_finger,
-            w=5,
+            prot=protein_ids_repeat,
+            attn=protein_atts_repeat,
+            w=0,
             clip_denoised=True,
             denoised_fn=None,
             cond_fn=None,
@@ -323,15 +424,19 @@ for i in indices:
 sample = img
 sample = img.reshape(-1, 1, 32768)
 
-mins = torch.tensor(np.load("data/smiles_mins_selfies.npy"), device=device).reshape(1, 1, -1)
-maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy"), device=device).reshape(1, 1, -1)
-sample_rescale = (((sample + 1) / 2) * (maxes - mins) + mins)
+sample = sample.cpu().detach().numpy()
+# reference_sample_np = reference_sample.reshape(1,-1).cpu().detach().numpy()
+# sample_rescale = ((sample + 1) / 2) * (global_max - global_min) + global_min
+# Step 2: Undo the Z-score normalization to restore the original data
+# sample_rescale = torch.tensor(sample_rescale * global_std + global_mean, device=device)
+
+sample_rescale = torch.tensor(normalizer.denormalize(sample), device=device)
+
 # print(sample_rescale.shape)
 
 # Step 0.3.3: Convert from SELFIES back to SMILES
-tokenizer = SelfiesTok.load("models/selfies_tok.json")
 with torch.no_grad():
-    decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
+    decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=dataset.tokenizer)
 
 def compute_qed_sas(smiles):
     try:
@@ -367,79 +472,109 @@ def select_best_smiles(smiles_list):
     return top_5_indices
 
 smiles_list = []
+
 for decode in decoded_smiles:
-    predicted_selfie = tokenizer.decode(decode.detach().cpu().flatten().tolist(), skip_special_tokens=True)
+    predicted_selfie = dataset.decode(decode.detach().cpu().flatten().tolist())
     predicted_smile = sf.decoder(predicted_selfie)
     smiles_list.append(predicted_smile)
 
 best5 = sample[select_best_smiles(smiles_list), :, :]
-num_generations = 20
+num_generations = 1
 time = torch.tensor([num_advance], device=device).repeat(per_new, 1)
-protein_finger = (protein_sequence,) * per_new
 for generation in range(num_generations):
-    all_samples = None
-    all_smiles = []
-    for idx, prev_sample in enumerate(best5):
-        prev_sample = prev_sample.reshape(-1, 256, 128).repeat(per_new, 1, 1)
-        img = diffusion_model.q_sample(prev_sample, time)
-        shape = (per_new, 256, 128)
-        indices = list(range(num_advance))[::-1]
-        # Lazy import so that we don't depend on tqdm.
-        from tqdm.auto import tqdm
-        indices = tqdm(indices)
-        for i in indices:
-            t = torch.tensor([i] * shape[0], device=device)
+    flag = False
+    while not flag:
+        all_samples = None
+        all_smiles = []
+        for idx, prev_sample in enumerate(best5):
+            prev_sample = torch.tensor(prev_sample, device=device)
+            prev_sample = prev_sample.reshape(-1, 256, 128).repeat(per_new, 1, 1)
+            img = diffusion_model.q_sample(prev_sample, time)
+            shape = (per_new, 256, 128)
+            indices = list(range(num_advance))[::-1]
+            # Lazy import so that we don't depend on tqdm.
+            from tqdm.auto import tqdm
+            indices = tqdm(indices)
+            for i in indices:
+                t = torch.tensor([i] * shape[0], device=device)
+                with torch.no_grad():
+                    out = diffusion_model.p_sample(
+                        unet,
+                        img,
+                        t,
+                        prot=protein_ids_repeat,
+                        attn=protein_atts_repeat,
+                        w=0,
+                        clip_denoised=True,
+                        denoised_fn=None,
+                        cond_fn=None,
+                        model_kwargs=None,
+                    )
+                    img = out["sample"]
+
+            sample = img
+            sample = img.reshape(-1, 1, 32768)
+            sample = sample.cpu().detach().numpy()
+            # reference_sample_np = reference_sample.reshape(1,-1).cpu().detach().numpy()
+            # sample_rescale = ((sample + 1) / 2) * (global_max - global_min) + global_min
+            # Step 2: Undo the Z-score normalization to restore the original data
+            # sample_rescale = torch.tensor(sample_rescale * global_std + global_mean, device=device)
+
+            sample_rescale = torch.tensor(normalizer.denormalize(sample), device=device)
+
+            # print(sample_rescale.shape)
+
+            # Step 0.3.3: Convert from SELFIES back to SMILES
             with torch.no_grad():
-                out = diffusion_model.p_sample(
-                    unet,
-                    img,
-                    t,
-                    prot=protein_finger,
-                    w=5,
-                    clip_denoised=True,
-                    denoised_fn=None,
-                    cond_fn=None,
-                    model_kwargs=None,
-                )
-                img = out["sample"]
+                decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=dataset.tokenizer)
+            indices = []
+            idx0 = 0
+            for decode in decoded_smiles:
+                predicted_selfie = dataset.decode(decode.detach().cpu().flatten().tolist())
+                predicted_smile = sf.decoder(predicted_selfie)
+                mol = Chem.MolFromSmiles(predicted_smile)
+                fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
+                sim = FingerprintSimilarity(reference_fp, fp)
+                if(sim >= 0.2):
+                    all_smiles.append(predicted_smile)
+                    indices.append(idx0)
+                
+                idx0 += 1
 
-        sample = img
-        sample = img.reshape(-1, 1, 32768)
+            sample = sample[indices]
 
-        mins = torch.tensor(np.load("data/smiles_mins_selfies.npy"), device=device).reshape(1, 1, -1)
-        maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy"), device=device).reshape(1, 1, -1)
-        sample_rescale = (((sample + 1) / 2) * (maxes - mins) + mins)
-        # print(sample_rescale.shape)
+            if len(sample) == 0:
+                continue
 
-        # Step 0.3.3: Convert from SELFIES back to SMILES
-        tokenizer = SelfiesTok.load("models/selfies_tok.json")
-        with torch.no_grad():
-            decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
+            if all_samples is None:
+                all_samples = sample
+            else:
+                all_samples = np.concatenate([all_samples, sample])
 
-        for decode in decoded_smiles:
-            predicted_selfie = tokenizer.decode(decode.detach().cpu().flatten().tolist(), skip_special_tokens=True)
-            predicted_smile = sf.decoder(predicted_selfie)
-            all_smiles.append(predicted_smile)
+        if all_samples is not None:
+            flag = True
+            best5 = all_samples[select_best_smiles(all_smiles), :, :]
 
-        if idx == 0:
-            all_samples = sample
-        else:
-            all_samples = torch.cat([all_samples, sample])
-
-    best5 = all_samples[select_best_smiles(all_smiles), :, :]
-
-mins = torch.tensor(np.load("data/smiles_mins_selfies.npy"), device=device).reshape(1, 1, -1)
-maxes = torch.tensor(np.load("data/smiles_maxes_selfies.npy"), device=device).reshape(1, 1, -1)
-best5_rescale = (((best5 + 1) / 2) * (maxes - mins) + mins)
+best5_rescale = torch.tensor(normalizer.denormalize(best5), device=device)
 
 evolved_smiles = []
-tokenizer = SelfiesTok.load("models/selfies_tok.json")
 with torch.no_grad():
-    decoded_smiles, _ = mol_model.decode_representation(best5_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
+    decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(-1, max_seq_length, d_model), None, max_length=128, tokenizer=dataset.tokenizer)
 
 for decode in decoded_smiles:
-    predicted_selfie = tokenizer.decode(decode.detach().cpu().flatten().tolist(), skip_special_tokens=True)
+    predicted_selfie = dataset.decode(decode.detach().cpu().flatten().tolist())
     predicted_smile = sf.decoder(predicted_selfie)
     evolved_smiles.append(predicted_smile)
 
-print(evolved_smiles)
+for evolved_smile in evolved_smiles:
+    mol = Chem.MolFromSmiles(evolved_smile)
+    # mol = Chem.AddHs(mol)
+    # Filter for QED at least 0.5, SAS below 5
+    qed = QED.qed(mol)
+    sas = sascorer.calculateScore(mol)
+    fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
+    sim = FingerprintSimilarity(reference_fp, fp)
+    print(f"SMILES {evolved_smile} QED: {qed} SAS: {sas} SIM: {sim}")
+
+
+# print(evolved_smiles)

@@ -14,8 +14,8 @@ mol_model:
   warmup_epochs: 10
   total_epochs: 200
   patience: 7
-  pretrain_epochs: 20
-  pretrain_learning_rate: 1.0e-4
+  pretrain_epochs: 15
+  pretrain_learning_rate: 2.0e-4
   # tokenizer_file: "models/smiles_tokenizer_10K_full.json"
   
 protein_model:

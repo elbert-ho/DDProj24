@@ -15,6 +15,8 @@ from rdkit.Chem import Draw
 from SelfiesTok import SelfiesTok
 import selfies as sf
 import pandas as pd
+from MolLoaderSelfiesFinal import SMILESDataset
+from Normalizer import Normalizer
 
 # FIX
 # def get_balanced_grad(x, t, prot):
@@ -72,9 +74,9 @@ num_heads = config["mol_model"]["num_heads"]
 num_layers = config["mol_model"]["num_layers"]
 d_ff = config["mol_model"]["d_ff"]
 dropout = config["mol_model"]["dropout"]
-tok_file = config["mol_model"]["tokenizer_file"]
+# tok_file = config["mol_model"]["tokenizer_file"]
 mol_model = MultiTaskTransformer(src_vocab_size, tgt_vocab_size, d_model, num_heads, num_layers, d_ff, max_seq_length, dropout, num_tasks).to(device)
-mol_model.load_state_dict(torch.load('models/selfies_transformer_final.pt', map_location=device))
+mol_model.load_state_dict(torch.load('models/selfies_transformer_final_bpe.pt', map_location=device))
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -137,25 +139,42 @@ protein_atts = torch.tensor(np.load("data/attention_masks2.npy")[0], dtype=torch
 # cond_fn = get_balanced_grad()
 
 # sample = diffusion_model.p_sample_loop(unet, (1, 1, input_size), prot=protein_embedding, cond_fn=get_balanced_grad)
-sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_ids, attn=protein_atts, w=3).reshape(input_size)
+sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_ids, attn=protein_atts, w=0).reshape(input_size)
 # sample = diffusion_model.p_sample_loop(unet, (1, 256, 128), prot=protein_embedding, cond_fn=get_pIC50_grad).reshape(input_size)
 
 # sample = diffusion_model.ddim_sample_loop(unet, (1, 1, input_size), prot=protein_embedding)
 
-mins = np.load("data/smiles_mins_selfies.npy")
-maxes = np.load("data/smiles_maxes_selfies.npy")
-sample_rescale = torch.tensor(((sample.cpu().detach().numpy() + 1) / 2) * (maxes - mins) + mins, device=device)
+# mins = np.load("data/smiles_mins_selfies.npy")
+# maxes = np.load("data/smiles_maxes_selfies.npy")
+# sample_rescale = torch.tensor(((sample.cpu().detach().numpy() + 1) / 2) * (maxes - mins) + mins, device=device)
+
+# Load the saved parameters for reversing the transformations
+# global_mean = np.load("data/smiles_global_mean.npy")
+# global_std = np.load("data/smiles_global_std.npy")
+# global_min = np.load("data/smiles_global_min.npy")
+# global_max = np.load("data/smiles_global_max.npy")
+
+sample = sample.cpu().detach().numpy()
+# Step 1: Undo the min-max scaling
+# sample_rescale = ((sample + 1) / 2) * (global_max - global_min) + global_min
+
+# Step 2: Undo the Z-score normalization to restore the original data
+# sample_rescale = torch.tensor(sample_rescale * global_std + global_mean, device=device)
+normalizer = Normalizer()
+sample_rescale = torch.tensor(normalizer.denormalize(sample), device=device)
 # print(sample_rescale.shape)
 # print(maxes.shape)
 # print(mins.shape)
 
-tokenizer = SelfiesTok.load("models/selfies_tok.json")
+# tokenizer = SelfiesTok.load("models/selfies_tok.json")
+
+file_path = "data/pd_truncated_final_1.csv"
+dataset = SMILESDataset(file_path, tokenizer_path="models/selfies_tokenizer_final.json", unicode_path="models/unicode_mapping.json", props=False)
 
 with torch.no_grad():
-    decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
+    decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(1, max_seq_length, d_model), None, max_length=128, tokenizer=dataset.tokenizer)
 
-
-predicted_selfies = tokenizer.decode(decoded_smiles.detach().cpu().flatten().tolist(), skip_special_tokens=True)
+predicted_selfies = dataset.decode(decoded_smiles.detach().cpu().flatten().tolist())
 predicted_smiles = sf.decoder(predicted_selfies)
 print("Sampled SELFIES:", predicted_selfies)
 print("Sample SMILES: ", predicted_smiles)
@@ -168,52 +187,52 @@ try:
 except:
     pass
 
-exit()
+# exit()
 
-import imageio
-import os
+# import imageio
+# import os
 
-sample_generator = diffusion_model.p_sample_loop_progressive(unet, (1, 1, input_size), prot=protein_embedding)
+# sample_generator = diffusion_model.p_sample_loop_progressive(unet, (1, 1, input_size), prot=protein_embedding)
 
-idx = 0
-for sample_dict in sample_generator:
-    sample = sample_dict["sample"]
-    mins = np.load("data/smiles_mins_selfies.npy")
-    maxes = np.load("data/smiles_maxes_selfies.npy")
-    sample_rescale = torch.tensor(((sample.cpu().detach().numpy() + 1) / 2) * (maxes - mins) + mins, device=device)
-    # print(sample_rescale.shape)
-    # print(maxes.shape)
-    # print(mins.shape)
+# idx = 0
+# for sample_dict in sample_generator:
+#     sample = sample_dict["sample"]
+#     mins = np.load("data/smiles_mins_selfies.npy")
+#     maxes = np.load("data/smiles_maxes_selfies.npy")
+#     sample_rescale = torch.tensor(((sample.cpu().detach().numpy() + 1) / 2) * (maxes - mins) + mins, device=device)
+#     # print(sample_rescale.shape)
+#     # print(maxes.shape)
+#     # print(mins.shape)
 
-    tokenizer = SelfiesTok.load("models/selfies_tok.json")
+#     tokenizer = SelfiesTok.load("models/selfies_tok.json")
 
-    with torch.no_grad():
-        decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
-
-
-    predicted_selfies = tokenizer.decode(decoded_smiles.detach().cpu().flatten().tolist(), skip_special_tokens=True)
-    predicted_smiles = sf.decoder(predicted_selfies)
-
-    mol = Chem.MolFromSmiles(predicted_smiles)
-    img = Draw.MolToImage(mol)
-    img_path = f'imgs/gif/mol{idx+1:04}.png' 
-    img.save(img_path)
-    idx += 1
+#     with torch.no_grad():
+#         decoded_smiles, _ = mol_model.decode_representation(sample_rescale.reshape(1, max_seq_length, d_model), None, max_length=128, tokenizer=tokenizer)
 
 
+#     predicted_selfies = tokenizer.decode(decoded_smiles.detach().cpu().flatten().tolist(), skip_special_tokens=True)
+#     predicted_smiles = sf.decoder(predicted_selfies)
 
-png_dir = 'imgs/gif'
-images = []
-for file_name in sorted(os.listdir(png_dir)):
-    if file_name.endswith('.png'):
-        file_path = os.path.join(png_dir, file_name)
-        images.append(imageio.imread(file_path))
+#     mol = Chem.MolFromSmiles(predicted_smiles)
+#     img = Draw.MolToImage(mol)
+#     img_path = f'imgs/gif/mol{idx+1:04}.png' 
+#     img.save(img_path)
+#     idx += 1
 
-# Make it pause at the end so that the viewers can ponder
-for _ in range(10):
-    images.append(imageio.imread(file_path))
 
-imageio.mimsave('animation.gif', images)
+
+# png_dir = 'imgs/gif'
+# images = []
+# for file_name in sorted(os.listdir(png_dir)):
+#     if file_name.endswith('.png'):
+#         file_path = os.path.join(png_dir, file_name)
+#         images.append(imageio.imread(file_path))
+
+# # Make it pause at the end so that the viewers can ponder
+# for _ in range(10):
+#     images.append(imageio.imread(file_path))
+
+# imageio.mimsave('animation.gif', images)
 
 
 # final_x = sample_rescale.detach().to(device).squeeze(0)

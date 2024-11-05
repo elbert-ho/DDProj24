@@ -8,7 +8,7 @@ import numpy as np
 from tokenizers import Tokenizer
 import yaml
 from MolLoaderSelfiesFinal import SMILESDataset
-from MolTransformerSelfies import MultiTaskTransformer
+from MolTransformerSelfiesTanh import MultiTaskTransformer
 import optuna
 import selfies as sf
 
@@ -376,7 +376,7 @@ def train_and_validate(d_model, num_heads, num_layers, d_ff, dropout, learning_r
                 best_val_loss = val_loss
                 epochs_no_improve = 0
                 # Save the best model
-                torch.save(model.state_dict(), 'models/selfies_transformer_final_bpe.pt')
+                torch.save(model.state_dict(), 'models/selfies_transformer_final_bpe_tanh.pt')
             else:
                 epochs_no_improve += 1
 

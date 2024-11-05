@@ -13,6 +13,7 @@ import sys
 sys.path.append(os.path.join(os.environ['CONDA_PREFIX'], 'Library', 'share', 'RDKit', 'Contrib', 'SA_Score'))
 import sascorer
 from MolTransformerSelfies import MultiTaskTransformer
+from MolLoaderSelfiesFinal import SMILESDataset
 import yaml
 import selfies as sf
 # Suppress warnings

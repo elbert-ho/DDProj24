@@ -558,7 +558,20 @@ class GaussianDiffusion:
                 yield out
                 img = out["sample"]
 
-    def training_losses(self, model, x_start, t, prot, attn, noise=None, debug=False):
+    def compute_snr(self, t):
+        """
+        Compute the signal-to-noise ratio (SNR) for a given timestep t.
+
+        :param t: The timesteps tensor of shape [batch_size].
+        :return: A tensor of shape [batch_size], the SNR at each timestep.
+        """
+        alpha_t = _extract_into_tensor(self.alphas_cumprod, t, t.shape)
+        sigma_t = torch.sqrt(1 - alpha_t)
+        snr_t = (alpha_t ** 2) / (sigma_t ** 2)
+        return snr_t
+
+
+    def training_losses(self, model, x_start, t, prot, attn, noise=None, debug=False, gamma=1.0):        
         """
         Compute training losses for a single timestep.
 
@@ -602,8 +615,23 @@ class GaussianDiffusion:
         target = noise
         assert model_output.shape == target.shape == x_start.shape
         terms["mse"] = mean_flat((target - model_output) ** 2)
-        if "vb" in terms:
-            terms["loss"] = terms["mse"] + terms["vb"]
+
+        # Compute the SNR for weighting
+        snr_t = self.compute_snr(t)
+        
+        # Apply min-SNR-γ weighting: min(SNR, γ)
+        weight_t = torch.min(snr_t, torch.tensor(gamma, device=snr_t.device))
+        
+        print(weight_t)
+
+        # Apply weighting to both MSE and VB loss
+        weighted_mse_loss = weight_t * terms["mse"]
+        weighted_vb_loss = weight_t * terms["vb"]
+        
+        # Combine the weighted MSE and VB terms
+        terms["loss"] = weighted_mse_loss + weighted_vb_loss
+        # if "vb" in terms:
+            # terms["loss"] = terms["mse"] + terms["vb"]
         return terms
     
     def _vb_terms_bpd(

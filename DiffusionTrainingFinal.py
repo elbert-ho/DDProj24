@@ -76,8 +76,8 @@ train_dataset = Subset(dataset, train_indices)
 val_dataset = Subset(dataset, test_indices)
 
 
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True)
 
 # train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
 # val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
@@ -129,10 +129,15 @@ for epoch in range(epochs):
             # prot = list(prot)
             t = torch.randint(0, n_diff_step, [b,] ,device=device)
             # t = torch.tensor([1], device=device).repeat(b)
-            loss_dict = diffusion_model.training_losses(unet, mol, t, prot=ids, attn=atts)
-            loss = torch.mean(loss_dict["loss"])
-            loss_mse = torch.mean(loss_dict["mse"])
-            loss_vlb = torch.mean(loss_dict["vb"])
+            
+            for i in range(n_diff_step):
+                t = torch.full((b,), i, device=device)
+                loss_dict = diffusion_model.training_losses(unet, mol, t, prot=ids, attn=atts)
+                loss = torch.mean(loss_dict["loss"])
+                loss_mse = torch.mean(loss_dict["mse"])
+                loss_vlb = torch.mean(loss_dict["vb"])
+                print(f"Loss: {loss} MSE: {loss_mse} VLB: {loss_vlb}")
+            exit()
             val_loss += loss.item()
             val_mse_loss += loss_mse.item( )
             val_vb_loss += loss_vlb.item()

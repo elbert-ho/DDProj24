@@ -222,43 +222,46 @@
 
 # ________
 
-import csv
-import torch
-from MolLoaderSelfiesFinal import SMILESDataset
+# import csv
+# import torch
+# from MolLoaderSelfiesFinal import SMILESDataset
 
-# Load the dataset
-# file_path = "data/protein_drug_pairs_with_sequences_and_smiles_cleaned.csv"
+# # Load the dataset
+# # file_path = "data/protein_drug_pairs_with_sequences_and_smiles_cleaned.csv"
 
-file_path = "data/protein_drug_pairs_with_sequences_and_smiles_cleaned2.csv"
+# file_path = "data/protein_drug_pairs_with_sequences_and_smiles_cleaned2.csv"
 
-output_file_path = "data/pd_truncated_final_2.csv"  # New file to save filtered data
-# dataset0 = SMILESDataset("data/smiles_10000_selected_features_cleaned.csv", vocab_size=v_size, max_length=128)
+# output_file_path = "data/pd_truncated_final_2.csv"  # New file to save filtered data
+# # dataset0 = SMILESDataset("data/smiles_10000_selected_features_cleaned.csv", vocab_size=v_size, max_length=128)
 
-dataset = SMILESDataset(file_path, vocab_size=256, max_length=256, props=False, tokenizer_path="models/selfies_tokenizer_final.json", unicode_path="models/unicode_mapping.json")
-# dataset = SMILESDataset(file_path, vocab_size=256, max_length=256, props=False)
+# dataset = SMILESDataset(file_path, vocab_size=256, max_length=256, props=False, tokenizer_path="models/selfies_tokenizer_final.json", unicode_path="models/unicode_mapping.json")
+# # dataset = SMILESDataset(file_path, vocab_size=256, max_length=256, props=False)
 
 
-# Open the original CSV file to read and filter rows
-with open(file_path, 'r') as input_file:
-    reader = csv.DictReader(input_file)
-    rows = list(reader)
+# # Open the original CSV file to read and filter rows
+# with open(file_path, 'r') as input_file:
+#     reader = csv.DictReader(input_file)
+#     rows = list(reader)
 
-# List to hold valid rows
-valid_rows = []
-# Iterate over the dataset and check if the tokenized length is <= 128
-for i in range(len(dataset)):
-    ids, _ = dataset[i]  # Get the tokenized sequence
-    if ids is None:
-        continue
-    length = len(ids.nonzero(as_tuple=True)[0])  # Count the non-padding tokens
+# # List to hold valid rows
+# valid_rows = []
+# # Iterate over the dataset and check if the tokenized length is <= 128
+# for i in range(len(dataset)):
+#     ids, _ = dataset[i]  # Get the tokenized sequence
+#     if ids is None:
+#         continue
+#     length = len(ids.nonzero(as_tuple=True)[0])  # Count the non-padding tokens
     
-    if length <= 128:
-        valid_rows.append(rows[i])  # Keep the row if the sequence length is valid
+#     if length <= 128:
+#         valid_rows.append(rows[i])  # Keep the row if the sequence length is valid
 
-# Write the valid rows to the new CSV file
-with open(output_file_path, 'w', newline='') as output_file:
-    writer = csv.DictWriter(output_file, fieldnames=reader.fieldnames)
-    writer.writeheader()
-    writer.writerows(valid_rows)
+# # Write the valid rows to the new CSV file
+# with open(output_file_path, 'w', newline='') as output_file:
+#     writer = csv.DictWriter(output_file, fieldnames=reader.fieldnames)
+#     writer.writeheader()
+#     writer.writerows(valid_rows)
 
-print(f"Filtered dataset saved to {output_file_path}. Number of valid sequences: {len(valid_rows)}")
+# print(f"Filtered dataset saved to {output_file_path}. Number of valid sequences: {len(valid_rows)}")
+
+
+# Regularize the SMILES
