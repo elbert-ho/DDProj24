@@ -1,0 +1,185 @@
+\begin{thebibliography}{10}
+
+\bibitem{Arus-Pous2019}
+Josep Ar{\ifmmode\acute{u}\else\'{u}\fi}s-Pous, Simon~Viet Johansson, Oleksii Prykhodko, Esben~Jannik Bjerrum, Christian Tyrchan, Jean-Louis Reymond, Hongming Chen, and Ola Engkvist.
+\newblock {Randomized SMILES strings improve the quality of molecular generative models}.
+\newblock {\em J. Cheminf.}, 11, 2019.
+
+\bibitem{Bajusz2015Dec}
+D{\ifmmode\acute{a}\else\'{a}\fi}vid Bajusz, Anita R{\ifmmode\acute{a}\else\'{a}\fi}cz, and K{\ifmmode\acute{a}\else\'{a}\fi}roly H{\ifmmode\acute{e}\else\'{e}\fi}berger.
+\newblock {Why is Tanimoto index an appropriate choice for fingerprint-based similarity calculations?}
+\newblock {\em J. Cheminf.}, 7(1):1--13, December 2015.
+
+\bibitem{Bickerton2012-vd}
+G~Richard Bickerton, Gaia~V Paolini, J{\'e}r{\'e}my Besnard, Sorel Muresan, and Andrew~L Hopkins.
+\newblock Quantifying the chemical beauty of drugs.
+\newblock {\em Nat. Chem.}, 4(2):90--98, January 2012.
+
+\bibitem{brown2020languagemodelsfewshotlearners}
+Tom~B. Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, Tom Henighan, Rewon Child, Aditya Ramesh, Daniel~M. Ziegler, Jeffrey Wu, Clemens Winter, Christopher Hesse, Mark Chen, Eric Sigler, Mateusz Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec Radford, Ilya Sutskever, and Dario Amodei.
+\newblock Language models are few-shot learners, 2020.
+
+\bibitem{biom13091339}
+Andrea Citarella, Alessandro Dimasi, Davide Moi, Daniele Passarella, Angela Scala, Anna Piperno, and Nicola Micale.
+\newblock Recent advances in sars-cov-2 main protease inhibitors: From nirmatrelvir to future perspectives.
+\newblock {\em Biomolecules}, 13(9), 2023.
+
+\bibitem{ERTL17}
+Peter Ertl, Richard Lewis, Eric~J. Martin, and Valery~R. Polyakov.
+\newblock In silico generation of novel, drug-like chemical matter using the {LSTM} neural network.
+\newblock {\em CoRR}, abs/1712.07449, 2017.
+
+\bibitem{Ertl2009}
+Peter Ertl and Ansgar Schuffenhauer.
+\newblock Estimation of synthetic accessibility score of drug-like molecules based on molecular complexity and fragment contributions.
+\newblock {\em Journal of Cheminformatics}, 1(1):8, Jun 2009.
+
+\bibitem{fabian2020molecularrepresentationlearninglanguage}
+Benedek Fabian, Thomas Edlich, Héléna Gaspar, Marwin Segler, Joshua Meyers, Marco Fiscato, and Mohamed Ahmed.
+\newblock Molecular representation learning with language models and domain-relevant auxiliary tasks, 2020.
+
+\bibitem{gebauer20}
+Niklas W.~A. Gebauer, Michael Gastegger, and Kristof~T. Schütt.
+\newblock Symmetry-adapted generation of 3d point sets for the targeted discovery of molecules, 2020.
+
+\bibitem{Bombarelli16}
+Rafael G{\'{o}}mez{-}Bombarelli, David Duvenaud, Jos{\'{e}}~Miguel Hern{\'{a}}ndez{-}Lobato, Jorge Aguilera{-}Iparraguirre, Timothy~D. Hirzel, Ryan~P. Adams, and Al{\'{a}}n Aspuru{-}Guzik.
+\newblock Automatic chemical design using a data-driven continuous representation of molecules.
+\newblock {\em CoRR}, abs/1610.02415, 2016.
+
+\bibitem{guan2023d}
+Jiaqi Guan, Wesley~Wei Qian, Xingang Peng, Yufeng Su, Jian Peng, and Jianzhu Ma.
+\newblock 3d equivariant diffusion for target-aware molecule generation and affinity prediction.
+\newblock In {\em The Eleventh International Conference on Learning Representations}, 2023.
+
+\bibitem{Guimaraes18}
+Gabriel~Lima Guimaraes, Benjamin Sanchez-Lengeling, Carlos Outeiral, Pedro Luis~Cunha Farias, and Alán Aspuru-Guzik.
+\newblock Objective-reinforced generative adversarial networks (organ) for sequence generation models, 2018.
+
+\bibitem{ho2020denoisingdiffusionprobabilisticmodels}
+Jonathan Ho, Ajay Jain, and Pieter Abbeel.
+\newblock Denoising diffusion probabilistic models, 2020.
+
+\bibitem{ho2022classifierfreediffusionguidance}
+Jonathan Ho and Tim Salimans.
+\newblock Classifier-free diffusion guidance, 2022.
+
+\bibitem{honda2019smilestransformerpretrainedmolecular}
+Shion Honda, Shoi Shi, and Hiroki~R. Ueda.
+\newblock Smiles transformer: Pre-trained molecular fingerprint for low data drug discovery, 2019.
+
+\bibitem{hoogeboom22}
+Emiel Hoogeboom, Victor~Garcia Satorras, Clément Vignac, and Max Welling.
+\newblock Equivariant diffusion for molecule generation in 3d, 2022.
+
+\bibitem{kalwar2022latentganautoencoderlearningdisentangled}
+Sanket Kalwar, Animikh Aich, and Tanay Dixit.
+\newblock Latentgan autoencoder: Learning disentangled latent distribution, 2022.
+
+\bibitem{kingma2017adammethodstochasticoptimization}
+Diederik~P. Kingma and Jimmy Ba.
+\newblock Adam: A method for stochastic optimization, 2017.
+
+\bibitem{Krenn19}
+Mario Krenn, Florian H{\"{a}}se, AkshatKumar Nigam, Pascal Friederich, and Al{\'{a}}n Aspuru{-}Guzik.
+\newblock {SELFIES:} a robust representation of semantically constrained graphs with an example application in chemistry.
+\newblock {\em CoRR}, abs/1905.13741, 2019.
+
+\bibitem{rdkit}
+Greg Landrum.
+\newblock Rdkit: Open-source cheminformatics, 2006--.
+\newblock Accessed: 2024-09-07.
+
+\bibitem{Li23}
+Yuesen Li, Chengyi Gao, Xin Song, Xiangyu Wang, Yungang Xu, and Suxia Han.
+\newblock Druggpt: A gpt-based strategy for designing potential ligands targeting specific proteins.
+\newblock {\em bioRxiv}, 2023.
+
+\bibitem{lin2023dualbalancingmultitasklearning}
+Baijiong Lin, Weisen Jiang, Feiyang Ye, Yu~Zhang, Pengguang Chen, Ying-Cong Chen, Shu Liu, and James~T. Kwok.
+\newblock Dual-balancing for multi-task learning, 2023.
+
+\bibitem{Lin2022.07.20.500902}
+Zeming Lin, Halil Akin, Roshan Rao, Brian Hie, Zhongkai Zhu, Wenting Lu, Nikita Smetanin, Robert Verkuil, Ori Kabeli, Yaniv Shmueli, Allan dos Santos~Costa, Maryam Fazel-Zarandi, Tom Sercu, Salvatore Candido, and Alexander Rives.
+\newblock Evolutionary-scale prediction of atomic level protein structure with a language model.
+\newblock {\em bioRxiv}, 2022.
+
+\bibitem{luo20223dgenerativemodelstructurebased}
+Shitong Luo, Jiaqi Guan, Jianzhu Ma, and Jian Peng.
+\newblock A 3d generative model for structure-based drug design, 2022.
+
+\bibitem{nichol2021improveddenoisingdiffusionprobabilistic}
+Alex Nichol and Prafulla Dhariwal.
+\newblock Improved denoising diffusion probabilistic models, 2021.
+
+\bibitem{nichol2022glidephotorealisticimagegeneration}
+Alex Nichol, Prafulla Dhariwal, Aditya Ramesh, Pranav Shyam, Pamela Mishkin, Bob McGrew, Ilya Sutskever, and Mark Chen.
+\newblock Glide: Towards photorealistic image generation and editing with text-guided diffusion models, 2022.
+
+\bibitem{peng2022pocket2molefficientmolecularsampling}
+Xingang Peng, Shitong Luo, Jiaqi Guan, Qi~Xie, Jian Peng, and Jianzhu Ma.
+\newblock Pocket2mol: Efficient molecular sampling based on 3d protein pockets, 2022.
+
+\bibitem{ramesh2022hierarchicaltextconditionalimagegeneration}
+Aditya Ramesh, Prafulla Dhariwal, Alex Nichol, Casey Chu, and Mark Chen.
+\newblock Hierarchical text-conditional image generation with clip latents, 2022.
+
+\bibitem{ramesh2021zeroshottexttoimagegeneration}
+Aditya Ramesh, Mikhail Pavlov, Gabriel Goh, Scott Gray, Chelsea Voss, Alec Radford, Mark Chen, and Ilya Sutskever.
+\newblock Zero-shot text-to-image generation, 2021.
+
+\bibitem{Reina2022-xy}
+J~Reina and C~Iglesias.
+\newblock Nirmatrelvir plus ritonavir (paxlovid) a potent {SARS-CoV-2} {3CLpro} protease inhibitor combination.
+\newblock {\em Rev. Esp. Quimioter.}, 35(3):236--240, June 2022.
+
+\bibitem{rombach2022highresolutionimagesynthesislatent}
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer.
+\newblock High-resolution image synthesis with latent diffusion models, 2022.
+
+\bibitem{schneuing2023}
+Arne Schneuing, Yuanqi Du, Charles Harris, Arian Jamasb, Ilia Igashov, Weitao Du, Tom Blundell, Pietro Lió, Carla Gomes, Max Welling, Michael Bronstein, and Bruno Correia.
+\newblock Structure-based drug design with equivariant diffusion models, 2023.
+
+\bibitem{sennrich2016neuralmachinetranslationrare}
+Rico Sennrich, Barry Haddow, and Alexandra Birch.
+\newblock Neural machine translation of rare words with subword units, 2016.
+
+\bibitem{sohldickstein2015deepunsupervisedlearningusing}
+Jascha Sohl-Dickstein, Eric~A. Weiss, Niru Maheswaranathan, and Surya Ganguli.
+\newblock Deep unsupervised learning using nonequilibrium thermodynamics, 2015.
+
+\bibitem{vaswani2023attentionneed}
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan~N. Gomez, Lukasz Kaiser, and Illia Polosukhin.
+\newblock Attention is all you need, 2023.
+
+\bibitem{vignac2023midimixedgraph3d}
+Clement Vignac, Nagham Osman, Laura Toni, and Pascal Frossard.
+\newblock Midi: Mixed graph and 3d denoising diffusion for molecule generation, 2023.
+
+\bibitem{Wang2005Jun}
+Renxiao Wang, Xueliang Fang, Yipin Lu, Chao-Yie Yang, and Shaomeng Wang.
+\newblock {The PDBbind database: methodologies and updates}.
+\newblock {\em J. Med. Chem.}, 48(12):4111--4119, June 2005.
+
+\bibitem{xu2023geometriclatentdiffusionmodels}
+Minkai Xu, Alexander Powers, Ron Dror, Stefano Ermon, and Jure Leskovec.
+\newblock Geometric latent diffusion models for 3d molecule generation, 2023.
+
+\bibitem{Yu23}
+Yuejiang Yu, Chun Cai, Jiayue Wang, Zonghua Bo, Zhengdan Zhu, and Hang Zheng.
+\newblock Uni-dock: Gpu-accelerated docking enables ultralarge virtual screening.
+\newblock {\em Journal of Chemical Theory and Computation}, 19(11):3336--3345, 2023.
+\newblock PMID: 37125970.
+
+\bibitem{zdrazil23}
+Barbara Zdrazil, Eloy Felix, Fiona Hunter, Emma~J Manners, James Blackshaw, Sybilla Corbett, Marleen de Veij, Harris Ioannidis, David~Mendez Lopez, Juan F Mosquera, Maria Paula Magarinos, Nicolas Bosc, Ricardo Arcila, Tevfik Kizilören, Anna Gaulton, A Patrícia Bento, Melissa F Adasme, Peter Monecke, Gregory A Landrum, and Andrew R Leach.
+\newblock {The ChEMBL Database in 2023: a drug discovery platform spanning multiple bioactivity data types and time periods}.
+\newblock {\em Nucleic Acids Research}, 52(D1):D1180--D1192, 11 2023.
+
+\bibitem{Zhu2020-be}
+Wei Zhu, Miao Xu, Catherine~Z Chen, Hui Guo, Min Shen, Xin Hu, Paul Shinn, Carleen Klumpp-Thomas, Samuel~G Michael, and Wei Zheng.
+\newblock Identification of {SARS-CoV-2} {3CL} protease inhibitors by a quantitative high-throughput screening.
+\newblock {\em ACS Pharmacol. Transl. Sci.}, 3(5):1008--1016, October 2020.
+
+\end{thebibliography}
