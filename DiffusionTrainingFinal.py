@@ -50,6 +50,8 @@ lr = config["diffusion_model"]["lr"]
 # epochs = config["diffusion_model"]["epochs"]
 patience = config["diffusion_model"]["patience"]
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# initialize both the unet and diffusion models
 diffusion_model = GaussianDiffusion(betas=get_named_beta_schedule(n_diff_step))
 unet = Text2ImUNet(text_ctx=1, xf_width=protein_embedding_dim, xf_layers=0, xf_heads=0, xf_final_ln=0, tokenizer=None, in_channels=256, model_channels=256, out_channels=512, num_res_blocks=2, attention_resolutions=[], dropout=.1, channel_mult=(1, 2, 4, 8), dims=1)
 
@@ -86,7 +88,7 @@ optimizer = optim.AdamW(unet.parameters(), lr=lr)
 best_val_loss = float('inf')
 patience_counter = 0
 
-
+# loading the unet
 checkpoint_name = "checkpoint.pt"
 if(os.path.isfile(checkpoint_name)):
     checkpoint = torch.load(checkpoint_name)
@@ -102,10 +104,12 @@ empty_ids[0] = 1
 empty_ids[1] = 1
 empty_attn = torch.ones([1026], device=device, dtype=torch.int32)
 
+# training loop
 epochs = 500
 for epoch in range(epochs):
     print(f"EPOCH {epoch + 1} BEGIN")
     
+    # Validation Part
     unet.eval()
     val_loss = 0
     val_mse_loss = 0
@@ -122,6 +126,7 @@ for epoch in range(epochs):
             # print(mol.shape)
             # exit()
 
+            # Context-free guidance
             if(torch.randint(0, 5, (1,))[0] == 0):
                 ids = empty_ids.repeat(b, 1)
                 atts = empty_attn.repeat(b, 1)
@@ -149,6 +154,7 @@ for epoch in range(epochs):
     
     # exit()
 
+    # Training portion
     unet.train()
     epoch_loss = 0
     train_mse_loss = 0
@@ -164,6 +170,7 @@ for epoch in range(epochs):
         # prot = prot.to(device)
         b = mol.shape[0]
 
+        # Context-free guidance
         if(torch.randint(0, 5, (1,))[0] == 0):
             ids = empty_ids.repeat(b, 1)
             atts = empty_attn.repeat(b, 1)
@@ -235,6 +242,8 @@ for epoch in range(epochs):
     # if patience_counter >= patience:
     #     print("Early stopping triggered")
     #     break
+    
+    # SAVE MODEL
     if (epoch + 1) % 5 == 0:
         name = "checkpoint.pt"
         dict = {'epochs': epoch + loaded_epochs, 'state_dict': unet.state_dict(), 'optimizer': optimizer.state_dict(), 'scaler': scaler.state_dict()}

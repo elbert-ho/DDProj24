@@ -32,7 +32,6 @@ def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
 
 class GaussianDiffusion:
     # Code ported and adapted from GLIDE
-    
     def __init__(self,*,betas):
         betas = np.array(betas, dtype=np.float64)
         self.betas = betas
@@ -41,6 +40,7 @@ class GaussianDiffusion:
 
         self.num_timesteps = int(betas.shape[0])
 
+        # noising portion
         alphas = 1.0 - betas
         self.alphas_cumprod = np.cumprod(alphas, axis=0)
         self.alphas_cumprod_prev = np.append(1.0, self.alphas_cumprod[:-1])

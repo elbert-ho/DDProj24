@@ -90,6 +90,9 @@ class Text2ImUNet(UNetModel):
         self.cache = None
 
     def convert_to_fp16(self):
+        '''''
+        Only for lowering precision
+        '''''     
         super().convert_to_fp16()
         if self.xf_width:
             self.transformer.apply(convert_module_to_f16)
@@ -101,7 +104,11 @@ class Text2ImUNet(UNetModel):
             if self.xf_ar:
                 self.unemb.to(th.float16)
 
-    def get_text_emb(self, ids, attn):        
+    def get_text_emb(self, ids, attn):   
+        '''''
+        This function is for embedding the condition (only for conditional models)
+        ids, attn is specific to the protein esm model
+        '''''     
         # if protein_string[0] == "":
         #     xf_out = th.zeros([len(protein_string), 1024, 160], device="cuda")
         #     xf_proj = self.transformer_proj(xf_out[:, -1])
@@ -123,9 +130,16 @@ class Text2ImUNet(UNetModel):
     def del_cache(self):
         self.cache = None
 
-        
-
     def forward(self, x, timesteps, ids, attn):
+        '''''
+        Forward function for the model
+        x: input tensor (latent)
+        timesteps: time steps
+        ids: ids for the protein esm model
+        attn: attention mask for the protein esm model
+        output is the prediction the noise
+        '''''
+
         hs = []
         # print(x.shape)
         # exit()

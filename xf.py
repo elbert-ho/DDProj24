@@ -29,6 +29,9 @@ class LayerNorm(nn.LayerNorm):
 
 
 class MultiheadAttention(nn.Module):
+    """
+    For attention layers
+    """
     def __init__(self, n_ctx, width, heads):
         super().__init__()
         self.n_ctx = n_ctx
@@ -46,6 +49,9 @@ class MultiheadAttention(nn.Module):
 
 
 class MLP(nn.Module):
+    """
+    Multi layer perceptron (essentially feed forward with modifications)
+    """
     def __init__(self, width):
         super().__init__()
         self.width = width
@@ -58,6 +64,9 @@ class MLP(nn.Module):
 
 
 class QKVMultiheadAttention(nn.Module):
+    """
+    Multihead attention with query, key, value inputs.
+    """
     def __init__(self, n_heads: int, n_ctx: int):
         super().__init__()
         self.n_heads = n_heads
@@ -78,6 +87,9 @@ class QKVMultiheadAttention(nn.Module):
 
 
 class ResidualAttentionBlock(nn.Module):
+    """
+    Full attention block with multi-layer perceptronw
+    """
     def __init__(
         self,
         n_ctx: int,
@@ -102,6 +114,9 @@ class ResidualAttentionBlock(nn.Module):
 
 
 class Transformer(nn.Module):
+    """
+    Only needed for text embeddings
+    """
     def __init__(
         self,
         n_ctx: int,
