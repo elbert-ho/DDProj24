@@ -1,5 +1,5 @@
-# DDProj24
- 
+# SOLD: SELFIES-based Objective-driven Latent Diffusion
+[Paper Link]([url](https://arxiv.org/abs/2509.25198))
 Main Important Scripts:
 DiffusionModelGLIDE3.py (Actual diffusion model)
 DiffusionSamplingSelfiesESM.py (For creating samples)
